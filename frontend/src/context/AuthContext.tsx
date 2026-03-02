@@ -16,7 +16,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { getFirebaseAuth, getGoogleProvider } from "@/lib/firebase";
 
 interface AuthContextValue {
   user: User | null;
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
     });
@@ -42,13 +42,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
     return credential.user;
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     const credential = await createUserWithEmailAndPassword(
-      auth,
+      getFirebaseAuth(),
       email,
       password
     );
@@ -56,12 +56,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    const credential = await signInWithPopup(auth, googleProvider);
+    const credential = await signInWithPopup(getFirebaseAuth(), getGoogleProvider());
     return credential.user;
   }, []);
 
   const signOut = useCallback(async () => {
-    await firebaseSignOut(auth);
+    await firebaseSignOut(getFirebaseAuth());
   }, []);
 
   return (
