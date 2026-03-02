@@ -21,7 +21,7 @@ const diagnosticTitles: Record<string, string> = {
 };
 
 export default function HomePage() {
-  const { user, loading } = useAuth();
+  const { user, loading, hasProfile } = useAuth();
   const router = useRouter();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -33,8 +33,18 @@ export default function HomePage() {
   const [nearbyOpen, setNearbyOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
-  }, [loading, user, router]);
+    if (loading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    // hasProfile===null means the profile check is still in-flight — wait
+    if (hasProfile === null) return;
+    if (hasProfile === false) {
+      // New user: force profile creation before anything else
+      router.replace("/profile/create");
+    }
+  }, [loading, user, hasProfile, router]);
 
   function handleMenuSelect(key: string) {
     setSidebarOpen(false);
@@ -49,7 +59,8 @@ export default function HomePage() {
     }
   }
 
-  if (loading || !user) {
+  // Show spinner while auth OR profile check is still resolving
+  if (loading || !user || hasProfile === null || hasProfile === false) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <motion.div

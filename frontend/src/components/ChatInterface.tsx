@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FiSend, FiPaperclip, FiX } from "react-icons/fi";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
-import { chat, analyzeImage, getProfile, type UserProfile } from "@/lib/api";
+import { chat, analyzeImage } from "@/lib/api";
 
 interface Message {
   role: "user" | "assistant";
@@ -14,13 +14,12 @@ interface Message {
 }
 
 export default function ChatInterface() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -33,21 +32,17 @@ export default function ChatInterface() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Fetch profile and show welcome message
+  // Welcome message — uses profile name if available
   useEffect(() => {
     if (!user) return;
-
-    getProfile(user.uid)
-      .then((p) => setProfile(p))
-      .catch(() => {});
-
+    const displayName = userProfile?.name || user.displayName || null;
     setMessages([
       {
         role: "assistant",
-        content: `Hello${user.displayName ? `, ${user.displayName}` : ""}! I'm Valeon, your AI health companion. I can help you with health questions, analyze medical images, and more. How can I assist you today?`,
+        content: `Hello${displayName ? `, ${displayName}` : ""}! I'm Valeon, your AI health companion. I can help you with health questions, analyze medical images, and more. How can I assist you today?`,
       },
     ]);
-  }, [user]);
+  }, [user, userProfile]);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
@@ -84,7 +79,6 @@ export default function ChatInterface() {
     clearFile();
     setStreaming(true);
 
-    // Upload image first if present
     if (currentFile) {
       try {
         const result = await analyzeImage(currentFile, messageToSend);
@@ -92,22 +86,19 @@ export default function ChatInterface() {
           messageToSend = `[Image uploaded] ${result.analysis}\n\n${messageToSend}`;
         }
       } catch {
-        // Continue without image analysis
+        // continue without image analysis
       }
     }
 
-    // Add placeholder assistant message for streaming
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
-      const history = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const history = messages.map((m) => ({ role: m.role, content: m.content }));
 
+      // Pass userProfile from context so backend can personalise every response
       await chat(
         messageToSend,
         (chunk) => {
@@ -115,17 +106,14 @@ export default function ChatInterface() {
             const updated = [...prev];
             const last = updated[updated.length - 1];
             if (last.role === "assistant") {
-              updated[updated.length - 1] = {
-                ...last,
-                content: last.content + chunk,
-              };
+              updated[updated.length - 1] = { ...last, content: last.content + chunk };
             }
             return updated;
           });
         },
         controller.signal,
         history,
-        profile
+        userProfile   // ← profile now always passed from context
       );
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
@@ -135,8 +123,7 @@ export default function ChatInterface() {
           if (last.role === "assistant" && !last.content) {
             updated[updated.length - 1] = {
               ...last,
-              content:
-                "I'm sorry, I couldn't process your request right now. Please try again.",
+              content: "I'm sorry, I couldn't process your request right now. Please try again.",
             };
           }
           return updated;
@@ -176,9 +163,7 @@ export default function ChatInterface() {
                   />
                 )}
                 {msg.content ? (
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {msg.content}
-                  </p>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 ) : (
                   <div className="flex items-center gap-1.5 py-1 px-1">
                     {[0, 1, 2].map((dot) => (
@@ -213,11 +198,7 @@ export default function ChatInterface() {
             className="overflow-hidden border-t border-border/30 px-4 pt-3 pb-1"
           >
             <div className="relative inline-block">
-              <img
-                src={filePreview}
-                alt="Preview"
-                className="h-20 rounded-xl object-cover shadow-md"
-              />
+              <img src={filePreview} alt="Preview" className="h-20 rounded-xl object-cover shadow-md" />
               <motion.button
                 onClick={clearFile}
                 whileHover={{ scale: 1.1 }}

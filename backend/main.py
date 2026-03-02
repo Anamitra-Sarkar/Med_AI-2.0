@@ -71,7 +71,7 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
 CHAT_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
 SUMMARIZER_MODEL = "qwen/qwen3-32b"
-SYSTEM_PROMPT = (
+BASE_SYSTEM_PROMPT = (
     "You are Valeon, a helpful medical AI assistant. "
     "Provide accurate, empathetic, and evidence-based health information. "
     "Always remind users to consult a qualified healthcare professional for diagnosis and treatment."
@@ -86,6 +86,38 @@ def _sanitize(text: str) -> str:
     """Strip dangerous HTML / JS from user-supplied text."""
     cleaned = bleach.clean(text, tags=[], attributes={}, strip=True)
     return cleaned.strip()
+
+
+def _build_system_prompt(user_profile: dict | None) -> str:
+    """Extend the base system prompt with patient context when a profile is available."""
+    if not user_profile:
+        return BASE_SYSTEM_PROMPT
+
+    parts = []
+    if user_profile.get("name"):
+        parts.append(f"Patient name: {_sanitize(user_profile['name'])}")
+    if user_profile.get("email"):
+        parts.append(f"Email: {_sanitize(user_profile['email'])}")
+    if user_profile.get("diseases"):
+        parts.append(f"Known conditions: {_sanitize(user_profile['diseases'])}")
+    if user_profile.get("height"):
+        parts.append(f"Height: {_sanitize(user_profile['height'])}")
+    if user_profile.get("weight"):
+        parts.append(f"Weight: {_sanitize(user_profile['weight'])}")
+    if user_profile.get("left_eye_power"):
+        parts.append(f"Left eye power: {_sanitize(user_profile['left_eye_power'])}")
+    if user_profile.get("right_eye_power"):
+        parts.append(f"Right eye power: {_sanitize(user_profile['right_eye_power'])}")
+
+    if not parts:
+        return BASE_SYSTEM_PROMPT
+
+    profile_ctx = (
+        "\n\nPatient profile (use this context to personalise every response — "
+        "address the patient by name, factor in their conditions, and tailor advice accordingly):\n"
+        + "\n".join(f"  • {p}" for p in parts)
+    )
+    return BASE_SYSTEM_PROMPT + profile_ctx
 
 
 def _profiles_collection():
@@ -145,7 +177,6 @@ def summarize_prediction(model_name: str, predictions: dict[str, float]) -> str:
         max_completion_tokens=1024,
     )
     raw = response.choices[0].message.content or ""
-    # Strip any <think>…</think> blocks the model may emit
     cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
     return cleaned
 
@@ -177,7 +208,10 @@ async def chat(req: ChatRequest):
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty after sanitisation")
 
-    messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # Build a personalised system prompt using the patient's profile
+    system_content = _build_system_prompt(req.user_profile)
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
     for entry in req.history[-20:]:
         role = entry.get("role", "user")
         if role not in ("user", "assistant"):
@@ -229,7 +263,7 @@ async def analyze_image(
     response = groq_client.chat.completions.create(
         model=CHAT_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": BASE_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
@@ -297,7 +331,6 @@ async def create_profile(profile: ProfileCreate):
     doc["email"] = _sanitize(doc["email"])
     if doc.get("diseases"):
         doc["diseases"] = _sanitize(doc["diseases"])
-    # Upsert by firebase_uid so we don't create duplicates
     col.update_one(
         {"firebase_uid": doc["firebase_uid"]},
         {"$set": doc},

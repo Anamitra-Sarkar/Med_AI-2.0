@@ -3,7 +3,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { FiHeart, FiActivity } from "react-icons/fi";
+import { FiHeart, FiActivity, FiUser, FiMail } from "react-icons/fi";
 import toast from "react-hot-toast";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
@@ -21,9 +21,12 @@ const itemVariants = {
 };
 
 export default function ProfileCreatePage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, refreshProfile } = useAuth();
   const router = useRouter();
 
+  // Name and email editable (pre-filled from Firebase)
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [diseases, setDiseases] = useState("");
   const [height, setHeight] = useState("");
   const [heightUnit, setHeightUnit] = useState<"cm" | "ft">("cm");
@@ -37,6 +40,14 @@ export default function ProfileCreatePage() {
     if (!authLoading && !user) router.replace("/login");
   }, [authLoading, user, router]);
 
+  // Pre-fill name/email from Firebase as soon as user is available
+  useEffect(() => {
+    if (user) {
+      setName(user.displayName || "");
+      setEmail(user.email || "");
+    }
+  }, [user]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
@@ -45,12 +56,17 @@ export default function ProfileCreatePage() {
       return;
     }
 
+    if (!name.trim()) {
+      toast.error("Please enter your name");
+      return;
+    }
+
     setSubmitting(true);
     try {
       await createProfile({
         firebase_uid: user.uid,
-        name: user.displayName || "",
-        email: user.email || "",
+        name: name.trim(),
+        email: email.trim() || user.email || "",
         diseases: diseases.trim().toLowerCase() === "nil" || !diseases.trim() ? "NIL" : diseases.trim(),
         height: height ? `${height} ${heightUnit}` : undefined,
         weight: weight ? `${weight} ${weightUnit}` : undefined,
@@ -58,7 +74,10 @@ export default function ProfileCreatePage() {
         right_eye_power: rightEye || undefined,
       });
 
-      toast.success("Profile created successfully!");
+      // Update AuthContext so hasProfile flips to true and home renders
+      await refreshProfile();
+
+      toast.success("Profile created! Welcome to Valeon ❤️");
       router.push("/home");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to save profile";
@@ -127,10 +146,49 @@ export default function ProfileCreatePage() {
           variants={itemVariants}
           className="mb-8 text-center text-sm text-white/60"
         >
-          Help us personalise your health experience
+          This helps Valeon give you personalised, context-aware health assistance
         </motion.p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+
+          {/* Name */}
+          <motion.div variants={itemVariants}>
+            <label htmlFor="name" className="mb-1.5 block text-sm font-medium text-white/80">
+              Full Name <span className="text-red-400">*</span>
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 transition-all focus-within:border-teal-400 focus-within:shadow-[0_0_12px_rgba(20,184,166,0.3)]">
+              <FiUser className="shrink-0 text-white/40" />
+              <input
+                id="name"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Your full name"
+                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+              />
+            </div>
+          </motion.div>
+
+          {/* Email */}
+          <motion.div variants={itemVariants}>
+            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-white/80">
+              Email Address <span className="text-red-400">*</span>
+            </label>
+            <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 transition-all focus-within:border-teal-400 focus-within:shadow-[0_0_12px_rgba(20,184,166,0.3)]">
+              <FiMail className="shrink-0 text-white/40" />
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+              />
+            </div>
+          </motion.div>
+
           {/* Diseases */}
           <motion.div variants={itemVariants}>
             <label htmlFor="diseases" className="mb-1.5 block text-sm font-medium text-white/80">
@@ -143,8 +201,7 @@ export default function ProfileCreatePage() {
                 type="text"
                 value={diseases}
                 onChange={(e) => setDiseases(e.target.value)}
-                placeholder="Enter conditions separated by comma, or NIL"
-                aria-label="Diseases or conditions"
+                placeholder="e.g. Diabetes, Hypertension — or leave blank if none"
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
@@ -152,11 +209,8 @@ export default function ProfileCreatePage() {
 
           {/* Height + Weight row */}
           <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Height */}
             <div>
-              <label htmlFor="height" className="mb-1.5 block text-sm font-medium text-white/80">
-                Height
-              </label>
+              <label htmlFor="height" className="mb-1.5 block text-sm font-medium text-white/80">Height</label>
               <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 transition-all focus-within:border-teal-400 focus-within:shadow-[0_0_12px_rgba(20,184,166,0.3)]">
                 <FiActivity className="shrink-0 text-white/40" />
                 <input
@@ -167,13 +221,11 @@ export default function ProfileCreatePage() {
                   value={height}
                   onChange={(e) => setHeight(e.target.value)}
                   placeholder="Height"
-                  aria-label="Height"
                   className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <select
                   value={heightUnit}
                   onChange={(e) => setHeightUnit(e.target.value as "cm" | "ft")}
-                  aria-label="Height unit"
                   className="shrink-0 cursor-pointer rounded-md bg-white/10 px-2 py-1 text-xs font-medium text-white outline-none"
                 >
                   <option value="cm" className="text-slate-900">cm</option>
@@ -181,12 +233,8 @@ export default function ProfileCreatePage() {
                 </select>
               </div>
             </div>
-
-            {/* Weight */}
             <div>
-              <label htmlFor="weight" className="mb-1.5 block text-sm font-medium text-white/80">
-                Weight
-              </label>
+              <label htmlFor="weight" className="mb-1.5 block text-sm font-medium text-white/80">Weight</label>
               <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 transition-all focus-within:border-teal-400 focus-within:shadow-[0_0_12px_rgba(20,184,166,0.3)]">
                 <FiActivity className="shrink-0 text-white/40" />
                 <input
@@ -197,13 +245,11 @@ export default function ProfileCreatePage() {
                   value={weight}
                   onChange={(e) => setWeight(e.target.value)}
                   placeholder="Weight"
-                  aria-label="Weight"
                   className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
                 <select
                   value={weightUnit}
                   onChange={(e) => setWeightUnit(e.target.value as "kg" | "lbs")}
-                  aria-label="Weight unit"
                   className="shrink-0 cursor-pointer rounded-md bg-white/10 px-2 py-1 text-xs font-medium text-white outline-none"
                 >
                   <option value="kg" className="text-slate-900">kg</option>
@@ -215,11 +261,8 @@ export default function ProfileCreatePage() {
 
           {/* Eye Power row */}
           <motion.div variants={itemVariants} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Left Eye */}
             <div>
-              <label htmlFor="leftEye" className="mb-1.5 block text-sm font-medium text-white/80">
-                Left Eye Power
-              </label>
+              <label htmlFor="leftEye" className="mb-1.5 block text-sm font-medium text-white/80">Left Eye Power</label>
               <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 transition-all focus-within:border-teal-400 focus-within:shadow-[0_0_12px_rgba(20,184,166,0.3)]">
                 <span className="shrink-0 text-xs font-semibold text-white/40">L</span>
                 <input
@@ -229,17 +272,12 @@ export default function ProfileCreatePage() {
                   value={leftEye}
                   onChange={(e) => setLeftEye(e.target.value)}
                   placeholder="e.g. -1.50"
-                  aria-label="Left eye power"
                   className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </div>
             </div>
-
-            {/* Right Eye */}
             <div>
-              <label htmlFor="rightEye" className="mb-1.5 block text-sm font-medium text-white/80">
-                Right Eye Power
-              </label>
+              <label htmlFor="rightEye" className="mb-1.5 block text-sm font-medium text-white/80">Right Eye Power</label>
               <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-4 py-3 transition-all focus-within:border-teal-400 focus-within:shadow-[0_0_12px_rgba(20,184,166,0.3)]">
                 <span className="shrink-0 text-xs font-semibold text-white/40">R</span>
                 <input
@@ -249,7 +287,6 @@ export default function ProfileCreatePage() {
                   value={rightEye}
                   onChange={(e) => setRightEye(e.target.value)}
                   placeholder="e.g. -2.00"
-                  aria-label="Right eye power"
                   className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </div>
@@ -272,7 +309,7 @@ export default function ProfileCreatePage() {
                   transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                 />
               ) : (
-                "Save Profile"
+                "Save & Enter Valeon"
               )}
             </motion.button>
           </motion.div>
