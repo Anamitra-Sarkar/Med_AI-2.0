@@ -27,9 +27,13 @@ jobs:
           git init
           git lfs install
           git lfs track "*.h5" "*.pth" "*.pt" "*.keras" "*.weights.h5"
+
+          # Configure git identity for CI to avoid "Author identity unknown"
+          # Use the actor's GitHub username and noreply email. This config is repo-local.
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
           git add .
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
           git commit -m "Sync backend from GitHub"
 
       - name: Push to HuggingFace
