@@ -11,7 +11,9 @@ const nextConfig: NextConfig = {
   turbopack: {},
   images: {
     remotePatterns: [
-      { protocol: "https" as const, hostname: "**" },
+      { protocol: "https" as const, hostname: "lh3.googleusercontent.com" },
+      { protocol: "https" as const, hostname: "firebasestorage.googleapis.com" },
+      { protocol: "https" as const, hostname: "storage.googleapis.com" },
     ],
   },
   env: {
