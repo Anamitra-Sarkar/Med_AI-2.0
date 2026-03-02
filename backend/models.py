@@ -281,3 +281,5 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
         probs_list.append(0.0)
 
     return {c: round(p, 6) for c, p in zip(classes, probs_list)}
+
+    
