@@ -10,37 +10,50 @@ on:
 jobs:
   sync-to-huggingface:
     runs-on: ubuntu-latest
+
     steps:
+      # 1️⃣ Checkout full repo
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      # 2️⃣ Setup Git LFS
       - name: Set up Git LFS
         run: git lfs install
 
-      - name: Create temporary directory with backend files
+      # 3️⃣ Prepare backend-only temporary repo
+      - name: Prepare backend for HuggingFace
         run: |
           mkdir -p /tmp/hf-sync
-          cp -r backend/* /tmp/hf-sync/
+          rsync -av --exclude='.git' backend/ /tmp/hf-sync/
           cd /tmp/hf-sync
-          git init
+
+          # Initialize fresh repo with main branch
+          git init -b main
+
+          # Enable LFS
           git lfs install
-          git lfs track "*.h5" "*.pth" "*.pt" "*.keras" "*.weights.h5"
+          git lfs track "*.h5"
+          git lfs track "*.pth"
+          git lfs track "*.pt"
+          git lfs track "*.keras"
+          git lfs track "*.weights.h5"
 
-          # Configure git identity for CI to avoid "Author identity unknown"
-          # Use the actor's GitHub username and noreply email. This config is repo-local.
-          git config user.name "${GITHUB_ACTOR}"
-          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          # Configure Git identity
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # Commit backend files
           git add .
-          git commit -m "Sync backend from GitHub"
+          git commit -m "Auto-sync backend from GitHub"
 
+      # 4️⃣ Push to HuggingFace Space
       - name: Push to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE: ${{ secrets.HF_SPACE_NAME }}
         run: |
           cd /tmp/hf-sync
-          git remote add hf https://huggingface.co/spaces/${HF_SPACE}
-          git push --force https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE} main
+          git remote add origin https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}
+          git push --force origin main
