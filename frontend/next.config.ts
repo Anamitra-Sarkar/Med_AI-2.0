@@ -20,6 +20,22 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_API_URL:
       process.env.NEXT_PUBLIC_API_URL || "http://localhost:7860",
   },
+  async headers() {
+    return [
+      {
+        // Apply to all routes
+        source: "/(.*)",
+        headers: [
+          {
+            // Allows Firebase Auth popup (window.closed polling) to work
+            // 'same-origin' (Vercel default) breaks cross-origin popup references
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin-allow-popups",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);
