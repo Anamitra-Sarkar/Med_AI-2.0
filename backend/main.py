@@ -11,7 +11,7 @@ from typing import Any
 import bleach
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Query
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from groq import Groq
@@ -50,7 +50,6 @@ app.add_middleware(
 # Clients
 # ---------------------------------------------------------------------------
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 # MongoDB (optional – endpoints degrade gracefully if unavailable)
 _mongo_client: MongoClient | None = None
@@ -386,45 +385,76 @@ async def diagnose_cardiac(file: UploadFile = File(...)):
 
 
 # ---------------------------------------------------------------------------
-# Routes – Nearby Care (Google Maps Places proxy)
+# Routes – Nearby Care (Overpass API proxy – no Google Maps)
 # ---------------------------------------------------------------------------
 
 
-@app.get("/api/nearby-care")
-async def nearby_care(
-    lat: float = Query(..., ge=-90, le=90),
-    lng: float = Query(..., ge=-180, le=180),
-    radius: int = Query(default=5000, ge=100, le=50000),
-    type: str = Query(default="hospital"),
-):
-    if not GOOGLE_MAPS_API_KEY:
-        raise HTTPException(status_code=503, detail="Google Maps API key not configured")
+class NearbyCareRequest(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    radius: int = Field(default=3000, ge=100, le=50000)
 
-    allowed_types = {"hospital", "doctor", "pharmacy", "health", "physiotherapist", "dentist"}
-    place_type = type if type in allowed_types else "hospital"
 
-    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-    params = {
-        "location": f"{lat},{lng}",
-        "radius": radius,
-        "type": place_type,
-        "key": GOOGLE_MAPS_API_KEY,
-    }
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(url, params=params)
+AMENITY_TYPE_MAP = {
+    "hospital": "hospital",
+    "clinic": "clinic",
+    "pharmacy": "pharmacy",
+}
+
+
+@app.post("/api/nearby-care")
+async def nearby_care(req: NearbyCareRequest):
+    lat = req.lat
+    lon = req.lon
+    radius = req.radius
+
+    query = (
+        f"[out:json][timeout:25];"
+        f"("
+        f'node["amenity"="hospital"](around:{radius},{lat},{lon});'
+        f'node["amenity"="clinic"](around:{radius},{lat},{lon});'
+        f'node["amenity"="pharmacy"](around:{radius},{lat},{lon});'
+        f");"
+        f"out body;"
+    )
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        try:
+            resp = await client.post(OVERPASS_URL, data={"data": query})
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=504, detail="Overpass API timed out")
         if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="Google Maps API error")
+            raise HTTPException(status_code=502, detail="Overpass API error")
         data = resp.json()
 
     results = []
-    for place in data.get("results", []):
+    for element in data.get("elements", []):
+        tags = element.get("tags", {})
+        name = tags.get("name") or tags.get("name:en")
+        if not name:
+            continue
+        amenity = tags.get("amenity", "hospital")
         results.append({
-            "name": place.get("name"),
-            "address": place.get("vicinity"),
-            "rating": place.get("rating"),
-            "location": place.get("geometry", {}).get("location"),
-            "open_now": place.get("opening_hours", {}).get("open_now"),
-            "place_id": place.get("place_id"),
+            "name": name,
+            "type": AMENITY_TYPE_MAP.get(amenity, amenity),
+            "lat": element.get("lat"),
+            "lon": element.get("lon"),
+            "address": tags.get("addr:full")
+            or ", ".join(
+                filter(
+                    None,
+                    [
+                        tags.get("addr:housenumber"),
+                        tags.get("addr:street"),
+                        tags.get("addr:city"),
+                    ],
+                )
+            )
+            or None,
+            "phone": tags.get("phone") or tags.get("contact:phone"),
+            "website": tags.get("website") or tags.get("contact:website"),
+            "opening_hours": tags.get("opening_hours"),
         })
     return {"results": results}

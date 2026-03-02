@@ -176,26 +176,28 @@ export async function diagnoseImage(
   return res.json();
 }
 
-// --------------- Nearby places ---------------
+// --------------- Nearby places (Overpass API via backend proxy) ---------------
 
 export interface Place {
   name: string;
-  address: string;
-  rating?: number;
-  location?: { lat: number; lng: number };
-  open_now?: boolean;
-  place_id?: string;
+  type: string;
+  lat: number;
+  lon: number;
+  address?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  opening_hours?: string | null;
 }
 
 export async function getNearbyPlaces(
   lat: number,
-  lng: number,
-  type: string = "hospital",
-  radius: number = 5000
+  lon: number,
+  radius: number = 3000
 ): Promise<{ results: Place[] }> {
-  return request<{ results: Place[] }>(
-    `/api/nearby-care?lat=${lat}&lng=${lng}&type=${type}&radius=${radius}`
-  );
+  return request<{ results: Place[] }>("/api/nearby-care", {
+    method: "POST",
+    body: JSON.stringify({ lat, lon, radius }),
+  });
 }
 
 export { ApiError };

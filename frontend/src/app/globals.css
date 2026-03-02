@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 @config "../../tailwind.config.ts";
 
 /* ---------- CSS variables: light mode ---------- */
