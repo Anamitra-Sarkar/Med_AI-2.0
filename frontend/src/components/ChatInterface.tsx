@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FiSend, FiPaperclip, FiX } from "react-icons/fi";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
-import { chat, uploadImage, getProfile, type UserProfile } from "@/lib/api";
+import { chat, analyzeImage, getProfile, type UserProfile } from "@/lib/api";
 
 interface Message {
   role: "user" | "assistant";
@@ -87,7 +87,7 @@ export default function ChatInterface() {
     // Upload image first if present
     if (currentFile) {
       try {
-        const result = await uploadImage(currentFile);
+        const result = await analyzeImage(currentFile, messageToSend);
         if (result.analysis) {
           messageToSend = `[Image uploaded] ${result.analysis}\n\n${messageToSend}`;
         }

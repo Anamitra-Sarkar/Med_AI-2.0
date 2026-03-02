@@ -47,23 +47,16 @@ export default function ProfileCreatePage() {
 
     setSubmitting(true);
     try {
-      const medicalHistory =
-        diseases.trim().toLowerCase() === "nil" || !diseases.trim()
-          ? []
-          : diseases.split(",").map((d) => d.trim()).filter(Boolean);
-
       await createProfile({
-        uid: user.uid,
+        firebase_uid: user.uid,
         name: user.displayName || "",
         email: user.email || "",
-        medical_history: medicalHistory,
-        allergies: [],
-        // Extra health data sent alongside the profile
-        ...(height && { height: `${height} ${heightUnit}` }),
-        ...(weight && { weight: `${weight} ${weightUnit}` }),
-        ...(leftEye && { left_eye_power: parseFloat(leftEye) }),
-        ...(rightEye && { right_eye_power: parseFloat(rightEye) }),
-      } as Parameters<typeof createProfile>[0]);
+        diseases: diseases.trim().toLowerCase() === "nil" || !diseases.trim() ? "NIL" : diseases.trim(),
+        height: height ? `${height} ${heightUnit}` : undefined,
+        weight: weight ? `${weight} ${weightUnit}` : undefined,
+        left_eye_power: leftEye || undefined,
+        right_eye_power: rightEye || undefined,
+      });
 
       toast.success("Profile created successfully!");
       router.push("/home");

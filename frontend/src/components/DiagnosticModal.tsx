@@ -227,31 +227,11 @@ export default function DiagnosticModal({
                         Analysis Summary
                       </h3>
                       <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
-                        {result.diagnosis}
+                        {result.summary}
                       </p>
                     </div>
                   </div>
                 </div>
-
-                {/* Precautions / Recommendations */}
-                {result.recommendations && result.recommendations.length > 0 && (
-                  <div className="rounded-2xl border border-blue-500/20 bg-blue-500/10 p-4">
-                    <h3 className="mb-2 font-semibold text-white">
-                      Precautions
-                    </h3>
-                    <ul className="space-y-1.5">
-                      {result.recommendations.map((rec, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2 text-sm text-white/80"
-                        >
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
-                          {rec}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
 
                 {/* Consult doctor note */}
                 <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">

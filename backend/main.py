@@ -17,7 +17,6 @@ from fastapi.responses import StreamingResponse
 from groq import Groq
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
-from bson import ObjectId
 
 from models import MODEL_REGISTRY, predict
 
@@ -270,19 +269,24 @@ async def summarize(req: SummarizeRequest):
 
 
 class ProfileCreate(BaseModel):
+    firebase_uid: str = Field(..., min_length=1, max_length=200)
     name: str = Field(..., min_length=1, max_length=200)
     email: str = Field(..., min_length=3, max_length=320)
-    age: int | None = Field(default=None, ge=0, le=150)
-    gender: str | None = Field(default=None, max_length=50)
-    medical_history: str | None = Field(default=None, max_length=5000)
+    diseases: str | None = Field(default=None, max_length=2000)
+    height: str | None = Field(default=None, max_length=50)
+    weight: str | None = Field(default=None, max_length=50)
+    left_eye_power: str | None = Field(default=None, max_length=50)
+    right_eye_power: str | None = Field(default=None, max_length=50)
 
 
 class ProfileUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     email: str | None = Field(default=None, min_length=3, max_length=320)
-    age: int | None = Field(default=None, ge=0, le=150)
-    gender: str | None = Field(default=None, max_length=50)
-    medical_history: str | None = Field(default=None, max_length=5000)
+    diseases: str | None = Field(default=None, max_length=2000)
+    height: str | None = Field(default=None, max_length=50)
+    weight: str | None = Field(default=None, max_length=50)
+    left_eye_power: str | None = Field(default=None, max_length=50)
+    right_eye_power: str | None = Field(default=None, max_length=50)
 
 
 @app.post("/api/profile", status_code=201)
@@ -291,44 +295,42 @@ async def create_profile(profile: ProfileCreate):
     doc = profile.model_dump()
     doc["name"] = _sanitize(doc["name"])
     doc["email"] = _sanitize(doc["email"])
-    if doc.get("medical_history"):
-        doc["medical_history"] = _sanitize(doc["medical_history"])
-    result = col.insert_one(doc)
-    doc["id"] = str(result.inserted_id)
-    doc.pop("_id", None)
-    return doc
+    if doc.get("diseases"):
+        doc["diseases"] = _sanitize(doc["diseases"])
+    # Upsert by firebase_uid so we don't create duplicates
+    col.update_one(
+        {"firebase_uid": doc["firebase_uid"]},
+        {"$set": doc},
+        upsert=True,
+    )
+    saved = col.find_one({"firebase_uid": doc["firebase_uid"]})
+    return _serialize_profile(saved)
 
 
-@app.get("/api/profile/{profile_id}")
-async def get_profile(profile_id: str):
+@app.get("/api/profile/{firebase_uid}")
+async def get_profile(firebase_uid: str):
     col = _profiles_collection()
-    try:
-        oid = ObjectId(profile_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid profile ID format")
-    doc = col.find_one({"_id": oid})
+    uid = _sanitize(firebase_uid)
+    doc = col.find_one({"firebase_uid": uid})
     if not doc:
         raise HTTPException(status_code=404, detail="Profile not found")
     return _serialize_profile(doc)
 
 
-@app.put("/api/profile/{profile_id}")
-async def update_profile(profile_id: str, profile: ProfileUpdate):
+@app.put("/api/profile/{firebase_uid}")
+async def update_profile(firebase_uid: str, profile: ProfileUpdate):
     col = _profiles_collection()
-    try:
-        oid = ObjectId(profile_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid profile ID format")
+    uid = _sanitize(firebase_uid)
     updates = {k: v for k, v in profile.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
-    for field in ("name", "email", "medical_history"):
+    for field in ("name", "email", "diseases"):
         if field in updates and isinstance(updates[field], str):
             updates[field] = _sanitize(updates[field])
-    result = col.update_one({"_id": oid}, {"$set": updates})
+    result = col.update_one({"firebase_uid": uid}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
-    doc = col.find_one({"_id": oid})
+    doc = col.find_one({"firebase_uid": uid})
     return _serialize_profile(doc)
 
 

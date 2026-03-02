@@ -48,7 +48,7 @@ export async function chat(
   history?: Array<{ role: string; content: string }>,
   userProfile?: UserProfile | null
 ): Promise<void> {
-  const url = `${BASE_URL}/chat`;
+  const url = `${BASE_URL}/api/chat`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -76,27 +76,35 @@ export async function chat(
       for (const line of lines) {
         const data = line.replace("data: ", "");
         if (data === "[DONE]") return;
-        onChunk(data);
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.content) onChunk(parsed.content);
+          if (parsed.error) throw new ApiError(parsed.error, 500);
+        } catch {
+          onChunk(data);
+        }
       }
     }
   }
 }
 
-// --------------- Image upload ---------------
+// --------------- Image analysis ---------------
 
-export async function uploadImage(
-  file: File
-): Promise<{ url: string; analysis: string }> {
+export async function analyzeImage(
+  file: File,
+  prompt?: string
+): Promise<{ analysis: string }> {
   validateFileSize(file);
 
   const formData = new FormData();
   formData.append("file", file);
+  if (prompt) formData.append("prompt", prompt);
 
-  const url = `${BASE_URL}/upload`;
+  const url = `${BASE_URL}/api/analyze-image`;
   const res = await fetch(url, { method: "POST", body: formData });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => "Upload failed");
+    const body = await res.text().catch(() => "Analysis failed");
     throw new ApiError(body, res.status);
   }
 
@@ -106,35 +114,35 @@ export async function uploadImage(
 // --------------- User profile ---------------
 
 export interface UserProfile {
-  uid: string;
+  id?: string;
+  firebase_uid: string;
   name: string;
   email: string;
-  age?: number;
-  gender?: string;
-  medical_history?: string[];
-  allergies?: string[];
-  created_at?: string;
-  updated_at?: string;
+  diseases?: string;
+  height?: string;
+  weight?: string;
+  left_eye_power?: string;
+  right_eye_power?: string;
 }
 
-export async function getProfile(uid: string): Promise<UserProfile> {
-  return request<UserProfile>(`/profile/${uid}`);
+export async function getProfile(firebaseUid: string): Promise<UserProfile> {
+  return request<UserProfile>(`/api/profile/${firebaseUid}`);
 }
 
 export async function createProfile(
-  profile: Omit<UserProfile, "created_at" | "updated_at">
+  profile: Omit<UserProfile, "id">
 ): Promise<UserProfile> {
-  return request<UserProfile>("/profile", {
+  return request<UserProfile>("/api/profile", {
     method: "POST",
     body: JSON.stringify(profile),
   });
 }
 
 export async function updateProfile(
-  uid: string,
+  firebaseUid: string,
   data: Partial<UserProfile>
 ): Promise<UserProfile> {
-  return request<UserProfile>(`/profile/${uid}`, {
+  return request<UserProfile>(`/api/profile/${firebaseUid}`, {
     method: "PUT",
     body: JSON.stringify(data),
   });
@@ -142,51 +150,11 @@ export async function updateProfile(
 
 // --------------- Diagnosis models ---------------
 
-export interface DiagnosisInput {
-  symptoms: string;
-  image?: string;
-  patient_info?: Record<string, unknown>;
-}
-
 export interface DiagnosisResult {
-  diagnosis: string;
-  confidence: number;
-  recommendations: string[];
   model: string;
+  predictions: Record<string, number>;
+  summary: string;
 }
-
-export async function diagnose(
-  model: string,
-  input: DiagnosisInput
-): Promise<DiagnosisResult> {
-  return request<DiagnosisResult>(`/diagnose/${model}`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-// --------------- Nearby places ---------------
-
-export interface Place {
-  name: string;
-  address: string;
-  lat: number;
-  lng: number;
-  rating?: number;
-  type: string;
-}
-
-export async function getNearbyPlaces(
-  lat: number,
-  lng: number,
-  radius: number = 5000
-): Promise<Place[]> {
-  return request<Place[]>(
-    `/places/nearby?lat=${lat}&lng=${lng}&radius=${radius}`
-  );
-}
-
-// --------------- Diagnose with image file ---------------
 
 export async function diagnoseImage(
   modelType: string,
@@ -197,7 +165,7 @@ export async function diagnoseImage(
   const formData = new FormData();
   formData.append("file", file);
 
-  const url = `${BASE_URL}/diagnose/${modelType}`;
+  const url = `${BASE_URL}/api/diagnose/${modelType}`;
   const res = await fetch(url, { method: "POST", body: formData });
 
   if (!res.ok) {
@@ -206,6 +174,28 @@ export async function diagnoseImage(
   }
 
   return res.json();
+}
+
+// --------------- Nearby places ---------------
+
+export interface Place {
+  name: string;
+  address: string;
+  rating?: number;
+  location?: { lat: number; lng: number };
+  open_now?: boolean;
+  place_id?: string;
+}
+
+export async function getNearbyPlaces(
+  lat: number,
+  lng: number,
+  type: string = "hospital",
+  radius: number = 5000
+): Promise<{ results: Place[] }> {
+  return request<{ results: Place[] }>(
+    `/api/nearby-care?lat=${lat}&lng=${lng}&type=${type}&radius=${radius}`
+  );
 }
 
 export { ApiError };

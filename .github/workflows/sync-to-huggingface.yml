@@ -1,0 +1,40 @@
+name: Sync Backend to HuggingFace Space
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+
+jobs:
+  sync-to-huggingface:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git LFS
+        run: git lfs install
+
+      - name: Create temporary directory with backend files
+        run: |
+          mkdir -p /tmp/hf-sync
+          cp -r backend/* /tmp/hf-sync/
+          cd /tmp/hf-sync
+          git init
+          git lfs install
+          git lfs track "*.h5" "*.pth" "*.pt" "*.keras" "*.weights.h5"
+          git add .
+          git commit -m "Sync backend from GitHub"
+
+      - name: Push to HuggingFace
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ secrets.HF_SPACE_NAME }}
+        run: |
+          cd /tmp/hf-sync
+          git remote add hf https://huggingface.co/spaces/${HF_SPACE}
+          git push --force https://user:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE} main

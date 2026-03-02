@@ -23,7 +23,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
   const [step, setStep] = useState<
     "ask" | "loading" | "results" | "denied" | "error"
   >("ask");
-  const [places, setPlaces] = useState<Place[]>([]);
+  const [places, setPlaces] = useState<(Place & { _type: string })[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>("doctors");
 
   const reset = useCallback(() => {
@@ -50,8 +50,16 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          const results = await getNearbyPlaces(latitude, longitude);
-          setPlaces(results);
+          const [doctors, clinics, pharmacies] = await Promise.all([
+            getNearbyPlaces(latitude, longitude, "doctor"),
+            getNearbyPlaces(latitude, longitude, "hospital"),
+            getNearbyPlaces(latitude, longitude, "pharmacy"),
+          ]);
+          setPlaces([
+            ...doctors.results.map((p) => ({ ...p, _type: "doctor" as const })),
+            ...clinics.results.map((p) => ({ ...p, _type: "clinic" as const })),
+            ...pharmacies.results.map((p) => ({ ...p, _type: "pharmacy" as const })),
+          ]);
           setStep("results");
         } catch {
           toast.error("Failed to fetch nearby places");
@@ -66,10 +74,9 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
   }
 
   const filteredPlaces = places.filter((p) => {
-    if (activeTab === "doctors") return p.type === "doctor";
-    if (activeTab === "clinics")
-      return p.type === "clinic" || p.type === "hospital";
-    return p.type === "pharmacy";
+    if (activeTab === "doctors") return p._type === "doctor";
+    if (activeTab === "clinics") return p._type === "clinic";
+    return p._type === "pharmacy";
   });
 
   return (

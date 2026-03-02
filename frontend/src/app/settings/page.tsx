@@ -48,10 +48,11 @@ export default function SettingsPage() {
   // Profile form
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [age, setAge] = useState("");
-  const [gender, setGender] = useState("");
-  const [medHistory, setMedHistory] = useState("");
-  const [allergies, setAllergies] = useState("");
+  const [diseases, setDiseases] = useState("");
+  const [height, setHeight] = useState("");
+  const [weight, setWeight] = useState("");
+  const [leftEye, setLeftEye] = useState("");
+  const [rightEye, setRightEye] = useState("");
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -64,10 +65,11 @@ export default function SettingsPage() {
         setProfile(p);
         setName(p.name || "");
         setEmail(p.email || "");
-        setAge(p.age?.toString() || "");
-        setGender(p.gender || "");
-        setMedHistory(p.medical_history?.join(", ") || "");
-        setAllergies(p.allergies?.join(", ") || "");
+        setDiseases(p.diseases || "");
+        setHeight(p.height || "");
+        setWeight(p.weight || "");
+        setLeftEye(p.left_eye_power || "");
+        setRightEye(p.right_eye_power || "");
       })
       .catch(() => {});
   }, [user]);
@@ -79,20 +81,11 @@ export default function SettingsPage() {
       const updated = await updateProfile(user.uid, {
         name,
         email,
-        age: age ? parseInt(age, 10) : undefined,
-        gender: gender || undefined,
-        medical_history: medHistory
-          ? medHistory
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [],
-        allergies: allergies
-          ? allergies
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [],
+        diseases: diseases || undefined,
+        height: height || undefined,
+        weight: weight || undefined,
+        left_eye_power: leftEye || undefined,
+        right_eye_power: rightEye || undefined,
       });
       setProfile(updated);
       toast.success("Profile updated!");
@@ -237,70 +230,74 @@ export default function SettingsPage() {
                       />
                     </div>
 
-                    {/* Age & Gender */}
+                    {/* Diseases */}
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-white/60">
+                        Diseases / Conditions
+                      </label>
+                      <input
+                        type="text"
+                        value={diseases}
+                        onChange={(e) => setDiseases(e.target.value)}
+                        placeholder="Conditions separated by comma, or NIL"
+                        className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 focus:shadow-[0_0_12px_rgba(20,184,166,0.2)]"
+                      />
+                    </div>
+
+                    {/* Height & Weight */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-white/60">
-                          Age
+                          Height
                         </label>
                         <input
-                          type="number"
-                          value={age}
-                          onChange={(e) => setAge(e.target.value)}
+                          type="text"
+                          value={height}
+                          onChange={(e) => setHeight(e.target.value)}
+                          placeholder="e.g. 170 cm"
                           className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
                         <label className="mb-1.5 block text-xs font-medium text-white/60">
-                          Gender
+                          Weight
                         </label>
-                        <select
-                          value={gender}
-                          onChange={(e) => setGender(e.target.value)}
-                          className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all focus:border-teal-400"
-                        >
-                          <option value="" className="text-slate-900">
-                            Select
-                          </option>
-                          <option value="male" className="text-slate-900">
-                            Male
-                          </option>
-                          <option value="female" className="text-slate-900">
-                            Female
-                          </option>
-                          <option value="other" className="text-slate-900">
-                            Other
-                          </option>
-                        </select>
+                        <input
+                          type="text"
+                          value={weight}
+                          onChange={(e) => setWeight(e.target.value)}
+                          placeholder="e.g. 70 kg"
+                          className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none"
+                        />
                       </div>
                     </div>
 
-                    {/* Medical History */}
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/60">
-                        Medical History
-                      </label>
-                      <input
-                        type="text"
-                        value={medHistory}
-                        onChange={(e) => setMedHistory(e.target.value)}
-                        placeholder="Conditions separated by comma"
-                        className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 focus:shadow-[0_0_12px_rgba(20,184,166,0.2)]"
-                      />
-                    </div>
-
-                    {/* Allergies */}
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-white/60">
-                        Allergies
-                      </label>
-                      <input
-                        type="text"
-                        value={allergies}
-                        onChange={(e) => setAllergies(e.target.value)}
-                        placeholder="Allergies separated by comma"
-                        className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 focus:shadow-[0_0_12px_rgba(20,184,166,0.2)]"
-                      />
+                    {/* Eye Power */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-white/60">
+                          Left Eye Power
+                        </label>
+                        <input
+                          type="text"
+                          value={leftEye}
+                          onChange={(e) => setLeftEye(e.target.value)}
+                          placeholder="e.g. -1.50"
+                          className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-xs font-medium text-white/60">
+                          Right Eye Power
+                        </label>
+                        <input
+                          type="text"
+                          value={rightEye}
+                          onChange={(e) => setRightEye(e.target.value)}
+                          placeholder="e.g. -2.00"
+                          className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm text-white outline-none transition-all placeholder:text-white/30 focus:border-teal-400 [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      </div>
                     </div>
 
                     {/* Save */}
