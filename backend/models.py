@@ -189,6 +189,7 @@ def _load_model(name: str) -> Any:
         from efficientnet_pytorch import EfficientNet
 
         model = EfficientNet.from_name("efficientnet-b0", num_classes=len(cfg["classes"]))
+        # weights_only=False required for legacy checkpoints; repo is trusted (Arko007/*)
         state = torch.load(path, map_location="cpu", weights_only=False)
         if isinstance(state, dict) and "model_state_dict" in state:
             state = state["model_state_dict"]
@@ -200,6 +201,7 @@ def _load_model(name: str) -> Any:
         import torch
 
         model = _build_cardiac_model(len(cfg["classes"]))
+        # weights_only=False required for legacy checkpoints; repo is trusted (Arko007/*)
         state = torch.load(path, map_location="cpu", weights_only=False)
         if isinstance(state, dict) and "model_state_dict" in state:
             state = state["model_state_dict"]
