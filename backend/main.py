@@ -1,0 +1,427 @@
+"""Valeon – Medical AI backend (FastAPI)."""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+from typing import Any
+
+import bleach
+import httpx
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from groq import Groq
+from pydantic import BaseModel, Field
+from pymongo import MongoClient
+from bson import ObjectId
+
+from models import MODEL_REGISTRY, predict
+
+load_dotenv()
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# App + CORS
+# ---------------------------------------------------------------------------
+app = FastAPI(title="Valeon API", version="1.0.0")
+
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"^https?://localhost:3000$|^https://.*\.vercel\.app$",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Clients
+# ---------------------------------------------------------------------------
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+
+# MongoDB (optional – endpoints degrade gracefully if unavailable)
+_mongo_client: MongoClient | None = None
+_db: Any = None
+
+MONGODB_URI = os.getenv("MONGODB_URI")
+if MONGODB_URI:
+    try:
+        _mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        _db = _mongo_client["valeon"]
+        logger.info("Connected to MongoDB Atlas.")
+    except Exception as exc:
+        logger.warning("MongoDB connection failed: %s", exc)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
+CHAT_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
+SUMMARIZER_MODEL = "qwen/qwen3-32b"
+SYSTEM_PROMPT = (
+    "You are Valeon, a helpful medical AI assistant. "
+    "Provide accurate, empathetic, and evidence-based health information. "
+    "Always remind users to consult a qualified healthcare professional for diagnosis and treatment."
+)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _sanitize(text: str) -> str:
+    """Strip dangerous HTML / JS from user-supplied text."""
+    cleaned = bleach.clean(text, tags=[], attributes={}, strip=True)
+    return cleaned.strip()
+
+
+def _profiles_collection():
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return _db["profiles"]
+
+
+async def _validate_upload(file: UploadFile) -> bytes:
+    """Read upload, enforce size & type limits."""
+    if file.content_type not in ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type: {file.content_type}. Allowed: {', '.join(sorted(ALLOWED_CONTENT_TYPES))}",
+        )
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds 10 MB limit")
+    if len(data) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return data
+
+
+def _serialize_profile(doc: dict) -> dict:
+    """Convert MongoDB document to JSON-safe dict."""
+    doc["id"] = str(doc.pop("_id"))
+    return doc
+
+
+# ---------------------------------------------------------------------------
+# Summarizer (shared by diagnostic endpoints)
+# ---------------------------------------------------------------------------
+
+
+def summarize_prediction(model_name: str, predictions: dict[str, float]) -> str:
+    """Call qwen3-32b to produce a human-readable diagnostic summary."""
+    sorted_preds = sorted(predictions.items(), key=lambda x: x[1], reverse=True)
+    pred_text = "\n".join(f"  - {cls}: {prob * 100:.2f}%" for cls, prob in sorted_preds)
+    prompt = (
+        f"You are a medical AI report generator. A patient submitted a medical image "
+        f"analysed by the **{model_name}** diagnostic model.\n\n"
+        f"Prediction probabilities:\n{pred_text}\n\n"
+        f"Write a concise, empathetic, patient-friendly summary of the results. "
+        f"Highlight the most likely finding, explain what it means in simple terms, "
+        f"note any secondary findings worth mentioning, and remind the patient to "
+        f"consult a healthcare professional for a definitive diagnosis. "
+        f"Do NOT use markdown formatting. Do NOT include thinking tags or chain-of-thought."
+    )
+
+    response = groq_client.chat.completions.create(
+        model=SUMMARIZER_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a concise medical report summariser. Output plain text only. No thinking tags, no markdown."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.3,
+        max_completion_tokens=1024,
+    )
+    raw = response.choices[0].message.content or ""
+    # Strip any <think>…</think> blocks the model may emit
+    cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    return cleaned
+
+
+# ---------------------------------------------------------------------------
+# Routes – Health
+# ---------------------------------------------------------------------------
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "valeon-api"}
+
+
+# ---------------------------------------------------------------------------
+# Routes – Chat (SSE streaming)
+# ---------------------------------------------------------------------------
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    history: list[dict[str, str]] = Field(default_factory=list)
+
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest):
+    message = _sanitize(req.message)
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty after sanitisation")
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for entry in req.history[-20:]:
+        role = entry.get("role", "user")
+        if role not in ("user", "assistant"):
+            continue
+        messages.append({"role": role, "content": _sanitize(entry.get("content", ""))})
+    messages.append({"role": "user", "content": message})
+
+    stream = groq_client.chat.completions.create(
+        model=CHAT_MODEL,
+        messages=messages,
+        temperature=0.7,
+        max_completion_tokens=2048,
+        stream=True,
+    )
+
+    async def _event_generator():
+        try:
+            for chunk in stream:
+                delta = chunk.choices[0].delta
+                if delta.content:
+                    payload = json.dumps({"content": delta.content})
+                    yield f"data: {payload}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            logger.error("Chat stream error: %s", exc)
+            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+
+    return StreamingResponse(_event_generator(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Routes – Image analysis (vision)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/analyze-image")
+async def analyze_image(
+    file: UploadFile = File(...),
+    prompt: str = Form(default="Describe this medical image in detail."),
+):
+    image_bytes = await _validate_upload(file)
+    prompt = _sanitize(prompt) or "Describe this medical image in detail."
+
+    import base64
+
+    b64 = base64.b64encode(image_bytes).decode()
+    mime = file.content_type or "image/jpeg"
+
+    response = groq_client.chat.completions.create(
+        model=CHAT_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                ],
+            },
+        ],
+        temperature=0.4,
+        max_completion_tokens=2048,
+    )
+    return {"analysis": response.choices[0].message.content}
+
+
+# ---------------------------------------------------------------------------
+# Routes – Summarizer (standalone)
+# ---------------------------------------------------------------------------
+
+
+class SummarizeRequest(BaseModel):
+    model_name: str
+    predictions: dict[str, float]
+
+
+@app.post("/api/summarize")
+async def summarize(req: SummarizeRequest):
+    model_name = _sanitize(req.model_name)
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model_name is required")
+    summary = summarize_prediction(model_name, req.predictions)
+    return {"summary": summary}
+
+
+# ---------------------------------------------------------------------------
+# Routes – Profile CRUD
+# ---------------------------------------------------------------------------
+
+
+class ProfileCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    email: str = Field(..., min_length=3, max_length=320)
+    age: int | None = Field(default=None, ge=0, le=150)
+    gender: str | None = Field(default=None, max_length=50)
+    medical_history: str | None = Field(default=None, max_length=5000)
+
+
+class ProfileUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    age: int | None = Field(default=None, ge=0, le=150)
+    gender: str | None = Field(default=None, max_length=50)
+    medical_history: str | None = Field(default=None, max_length=5000)
+
+
+@app.post("/api/profile", status_code=201)
+async def create_profile(profile: ProfileCreate):
+    col = _profiles_collection()
+    doc = profile.model_dump()
+    doc["name"] = _sanitize(doc["name"])
+    doc["email"] = _sanitize(doc["email"])
+    if doc.get("medical_history"):
+        doc["medical_history"] = _sanitize(doc["medical_history"])
+    result = col.insert_one(doc)
+    doc["id"] = str(result.inserted_id)
+    doc.pop("_id", None)
+    return doc
+
+
+@app.get("/api/profile/{profile_id}")
+async def get_profile(profile_id: str):
+    col = _profiles_collection()
+    try:
+        oid = ObjectId(profile_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid profile ID format")
+    doc = col.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return _serialize_profile(doc)
+
+
+@app.put("/api/profile/{profile_id}")
+async def update_profile(profile_id: str, profile: ProfileUpdate):
+    col = _profiles_collection()
+    try:
+        oid = ObjectId(profile_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid profile ID format")
+    updates = {k: v for k, v in profile.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    for field in ("name", "email", "medical_history"):
+        if field in updates and isinstance(updates[field], str):
+            updates[field] = _sanitize(updates[field])
+    result = col.update_one({"_id": oid}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    doc = col.find_one({"_id": oid})
+    return _serialize_profile(doc)
+
+
+# ---------------------------------------------------------------------------
+# Routes – Diagnostic models
+# ---------------------------------------------------------------------------
+
+
+async def _run_diagnostic(model_key: str, file: UploadFile) -> dict:
+    """Shared logic for all five diagnostic endpoints."""
+    image_bytes = await _validate_upload(file)
+    try:
+        predictions = predict(model_key, image_bytes)
+    except Exception as exc:
+        logger.error("Prediction error (%s): %s", model_key, exc)
+        raise HTTPException(status_code=500, detail=f"Model inference failed: {exc}")
+    try:
+        summary = summarize_prediction(model_key, predictions)
+    except Exception as exc:
+        logger.error("Summarisation error (%s): %s", model_key, exc)
+        summary = "Summary unavailable. Please review the raw prediction probabilities."
+    return {
+        "model": model_key,
+        "predictions": predictions,
+        "summary": summary,
+    }
+
+
+@app.post("/api/diagnose/cataract")
+async def diagnose_cataract(file: UploadFile = File(...)):
+    return await _run_diagnostic("cataract", file)
+
+
+@app.post("/api/diagnose/diabetic-retinopathy")
+async def diagnose_diabetic_retinopathy(file: UploadFile = File(...)):
+    return await _run_diagnostic("diabetic_retinopathy", file)
+
+
+@app.post("/api/diagnose/kidney")
+async def diagnose_kidney(file: UploadFile = File(...)):
+    return await _run_diagnostic("kidney", file)
+
+
+@app.post("/api/diagnose/skin")
+async def diagnose_skin(file: UploadFile = File(...)):
+    return await _run_diagnostic("skin", file)
+
+
+@app.post("/api/diagnose/cardiac")
+async def diagnose_cardiac(file: UploadFile = File(...)):
+    return await _run_diagnostic("cardiac", file)
+
+
+# ---------------------------------------------------------------------------
+# Routes – Nearby Care (Google Maps Places proxy)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/nearby-care")
+async def nearby_care(
+    lat: float = Query(..., ge=-90, le=90),
+    lng: float = Query(..., ge=-180, le=180),
+    radius: int = Query(default=5000, ge=100, le=50000),
+    type: str = Query(default="hospital"),
+):
+    if not GOOGLE_MAPS_API_KEY:
+        raise HTTPException(status_code=503, detail="Google Maps API key not configured")
+
+    allowed_types = {"hospital", "doctor", "pharmacy", "health", "physiotherapist", "dentist"}
+    place_type = type if type in allowed_types else "hospital"
+
+    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+    params = {
+        "location": f"{lat},{lng}",
+        "radius": radius,
+        "type": place_type,
+        "key": GOOGLE_MAPS_API_KEY,
+    }
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(url, params=params)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Google Maps API error")
+        data = resp.json()
+
+    results = []
+    for place in data.get("results", []):
+        results.append({
+            "name": place.get("name"),
+            "address": place.get("vicinity"),
+            "rating": place.get("rating"),
+            "location": place.get("geometry", {}).get("location"),
+            "open_now": place.get("opening_hours", {}).get("open_now"),
+            "place_id": place.get("place_id"),
+        })
+    return {"results": results}
