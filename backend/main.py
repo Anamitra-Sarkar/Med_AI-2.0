@@ -169,6 +169,7 @@ async def health_check():
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     history: list[dict[str, str]] = Field(default_factory=list)
+    user_profile: dict[str, Any] | None = Field(default=None)
 
 
 @app.post("/api/chat")

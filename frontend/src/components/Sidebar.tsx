@@ -20,7 +20,7 @@ interface SidebarProps {
 
 const menuItems = [
   { key: "cataract", label: "ClearView Cataract Screening", icon: FiEye },
-  { key: "dr", label: "RetinaGuard DR Grading", icon: FiActivity },
+  { key: "diabetic-retinopathy", label: "RetinaGuard DR Grading", icon: FiActivity },
   { key: "kidney", label: "NephroScan CT Analysis", icon: FiDroplet },
   { key: "skin", label: "DermaVision Skin Analysis", icon: FiSun },
   { key: "cardiac", label: "CardioInsight MRI Classifier", icon: FiZap },

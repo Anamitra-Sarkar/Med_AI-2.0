@@ -15,7 +15,7 @@ import {
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
-import { getProfile, updateProfile, type UserProfile } from "@/lib/api";
+import { getProfile, updateProfile } from "@/lib/api";
 
 /* ─── animation variants ─── */
 const containerVariants = {
@@ -40,7 +40,6 @@ export default function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
   const router = useRouter();
 
-  const [, setProfile] = useState<UserProfile | null>(null);
   const [profileExpanded, setProfileExpanded] = useState(false);
   const [logoutConfirm, setLogoutConfirm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,7 +61,6 @@ export default function SettingsPage() {
     if (!user) return;
     getProfile(user.uid)
       .then((p) => {
-        setProfile(p);
         setName(p.name || "");
         setEmail(p.email || "");
         setDiseases(p.diseases || "");
@@ -78,7 +76,7 @@ export default function SettingsPage() {
     if (!user) return;
     setSaving(true);
     try {
-      const updated = await updateProfile(user.uid, {
+      await updateProfile(user.uid, {
         name,
         email,
         diseases: diseases || undefined,
@@ -87,7 +85,6 @@ export default function SettingsPage() {
         left_eye_power: leftEye || undefined,
         right_eye_power: rightEye || undefined,
       });
-      setProfile(updated);
       toast.success("Profile updated!");
       setProfileExpanded(false);
     } catch (err) {

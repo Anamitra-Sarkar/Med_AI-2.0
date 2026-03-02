@@ -16,7 +16,7 @@ import {
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { getFirebaseAuth, getGoogleProvider } from "@/lib/firebase";
+import { getFirebaseAuth, getGoogleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
 interface AuthContextValue {
   user: User | null;
@@ -34,7 +34,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (firebaseUser) => {
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      // Firebase not configured – stop loading and render children.
+      setLoading(false);
+      return;
+    }
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);
     });
@@ -42,26 +48,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const credential = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+    const auth = getFirebaseAuth();
+    if (!auth) throw new Error("Firebase is not configured. Please add Firebase environment variables.");
+    const credential = await signInWithEmailAndPassword(auth, email, password);
     return credential.user;
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
-    const credential = await createUserWithEmailAndPassword(
-      getFirebaseAuth(),
-      email,
-      password
-    );
+    const auth = getFirebaseAuth();
+    if (!auth) throw new Error("Firebase is not configured. Please add Firebase environment variables.");
+    const credential = await createUserWithEmailAndPassword(auth, email, password);
     return credential.user;
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    const credential = await signInWithPopup(getFirebaseAuth(), getGoogleProvider());
+    const auth = getFirebaseAuth();
+    if (!auth) throw new Error("Firebase is not configured. Please add Firebase environment variables.");
+    const credential = await signInWithPopup(auth, getGoogleProvider());
     return credential.user;
   }, []);
 
   const signOut = useCallback(async () => {
-    await firebaseSignOut(getFirebaseAuth());
+    const auth = getFirebaseAuth();
+    if (!auth) return;
+    await firebaseSignOut(auth);
   }, []);
 
   return (

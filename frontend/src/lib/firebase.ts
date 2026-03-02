@@ -10,6 +10,11 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
 };
 
+/** Returns true when at least the API key is configured. */
+export function isFirebaseConfigured(): boolean {
+  return Boolean(firebaseConfig.apiKey);
+}
+
 let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
 let googleProvider: GoogleAuthProvider | undefined;
@@ -21,7 +26,8 @@ function getFirebaseApp(): FirebaseApp {
   return app;
 }
 
-function getFirebaseAuth(): Auth {
+function getFirebaseAuth(): Auth | null {
+  if (!isFirebaseConfigured()) return null;
   if (!auth) {
     auth = getAuth(getFirebaseApp());
   }

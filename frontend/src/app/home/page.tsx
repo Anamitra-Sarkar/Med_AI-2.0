@@ -14,7 +14,7 @@ import NearbyModal from "@/components/NearbyModal";
 
 const diagnosticTitles: Record<string, string> = {
   cataract: "ClearView Cataract Screening",
-  dr: "RetinaGuard DR Grading",
+  "diabetic-retinopathy": "RetinaGuard DR Grading",
   kidney: "NephroScan CT Analysis",
   skin: "DermaVision Skin Analysis",
   cardiac: "CardioInsight MRI Classifier",
