@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "cataract": {
         "repo_id": "Arko007/Cataract-Detection-CNN",
-        # Custom EfficientNet arch saved as full .keras — use from_pretrained_keras
-        "framework": "hf_keras",
+        # SavedModel format — load via TFSMLayer for Keras 3 compatibility
+        "framework": "tfsm",
         "input_size": (224, 224),
         "classes": ["Normal", "Cataract"],
     },
@@ -46,9 +46,8 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "skin": {
         "repo_id": "Arko007/skin-disease-detector-ai",
-        # Custom EfficientNet BEAST v2, ~150M params, 512x512 input, 8 classes
-        # MBConvBlock custom layer — must use from_pretrained_keras
-        "framework": "hf_keras",
+        # SavedModel format — load via TFSMLayer for Keras 3 compatibility
+        "framework": "tfsm",
         "input_size": (512, 512),
         "classes": [
             "Actinic Keratosis",
@@ -139,16 +138,31 @@ def _download(repo_id: str, filename: str) -> str:
     return hf_hub_download(repo_id=repo_id, filename=filename)
 
 
+def _snapshot(repo_id: str) -> str:
+    """Download the full repo snapshot and return the local directory path."""
+    from huggingface_hub import snapshot_download
+    return snapshot_download(repo_id=repo_id)
+
+
 def _load_model(name: str) -> Any:
     cfg = MODEL_REGISTRY[name]
     fw = cfg["framework"]
 
-    # ── Keras / TF models saved as full SavedModel/.keras via HF Hub ──────────
-    if fw == "hf_keras":
-        # from_pretrained_keras handles custom objects (MBConvBlock etc.) by
-        # importing the saved TF graph directly — no need to re-register layers.
-        from huggingface_hub import from_pretrained_keras
-        model = from_pretrained_keras(cfg["repo_id"])
+    # ── TF SavedModel repos loaded as inference-only TFSMLayer (Keras 3 safe) ─
+    if fw == "tfsm":
+        import keras
+        import tensorflow as tf
+
+        local_dir = _snapshot(cfg["repo_id"])
+        layer = keras.layers.TFSMLayer(local_dir, call_endpoint="serving_default")
+
+        # Wrap in a minimal functional model so we can call .predict() uniformly
+        inp = keras.Input(shape=(*cfg["input_size"], 3))
+        out = layer(inp)
+        # TFSMLayer returns a dict of tensors; grab the first output
+        if isinstance(out, dict):
+            out = list(out.values())[0]
+        model = keras.Model(inputs=inp, outputs=out)
         return model
 
     # ── Plain .h5 full model ───────────────────────────────────────────────────
@@ -201,7 +215,7 @@ def get_model(name: str) -> Any:
     if name not in _loaded_models:
         with _load_locks[name]:
             if name not in _loaded_models:
-                logger.info("Loading model %s …", name)
+                logger.info("Loading model %s \u2026", name)
                 _loaded_models[name] = _load_model(name)
                 logger.info("Model %s loaded and cached.", name)
     return _loaded_models[name]
@@ -218,7 +232,7 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
     classes = cfg["classes"]
     size = cfg["input_size"]
 
-    if fw in ("tf", "hf_keras"):
+    if fw in ("tf", "tfsm", "hf_keras"):
         inp = _preprocess_image_tf(image_bytes, size)
         raw = model.predict(inp, verbose=0)
         probs = raw[0]
