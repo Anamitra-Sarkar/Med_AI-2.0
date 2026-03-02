@@ -28,7 +28,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "repo_id": "Arko007/diabetic-retinopathy-v1",
         "filename": "best_model.h5",
         "framework": "tf",
-        "input_size": (224, 224),
+        "input_size": (384, 384),   # model functional layer expects (384, 384, 3)
         "classes": [
             "No DR",
             "Mild",
@@ -70,7 +70,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
 }
 
-# Loaded model objects (lazily populated)
+# Loaded model objects – populated lazily on first inference request, never at startup
 _loaded_models: dict[str, Any] = {}
 _load_locks: dict[str, threading.Lock] = {k: threading.Lock() for k in MODEL_REGISTRY}
 
@@ -157,7 +157,8 @@ def _build_cardiac_model(num_classes: int = 2):
 
 
 # ---------------------------------------------------------------------------
-# Model loading (lazy, thread-safe)
+# Model loading (lazy, thread-safe) – models are NEVER loaded at import time.
+# Each model is downloaded from HF Hub and cached on first inference call only.
 # ---------------------------------------------------------------------------
 
 def _download(repo_id: str, filename: str) -> str:
@@ -189,7 +190,6 @@ def _load_model(name: str) -> Any:
         from efficientnet_pytorch import EfficientNet
 
         model = EfficientNet.from_name("efficientnet-b0", num_classes=len(cfg["classes"]))
-        # weights_only=False required for legacy checkpoints; repo is trusted (Arko007/*)
         state = torch.load(path, map_location="cpu", weights_only=False)
         if isinstance(state, dict) and "model_state_dict" in state:
             state = state["model_state_dict"]
@@ -201,7 +201,6 @@ def _load_model(name: str) -> Any:
         import torch
 
         model = _build_cardiac_model(len(cfg["classes"]))
-        # weights_only=False required for legacy checkpoints; repo is trusted (Arko007/*)
         state = torch.load(path, map_location="cpu", weights_only=False)
         if isinstance(state, dict) and "model_state_dict" in state:
             state = state["model_state_dict"]
@@ -214,7 +213,11 @@ def _load_model(name: str) -> Any:
 
 
 def get_model(name: str) -> Any:
-    """Return a loaded model, downloading on first call (thread-safe)."""
+    """Return a loaded model, downloading from HF Hub on first call (thread-safe).
+
+    Models are cached in-process after the first load so subsequent requests
+    are served instantly from memory without re-downloading.
+    """
     if name not in MODEL_REGISTRY:
         raise KeyError(f"Unknown model: {name}")
     if name not in _loaded_models:
@@ -222,7 +225,7 @@ def get_model(name: str) -> Any:
             if name not in _loaded_models:
                 logger.info("Loading model %s …", name)
                 _loaded_models[name] = _load_model(name)
-                logger.info("Model %s loaded.", name)
+                logger.info("Model %s loaded and cached.", name)
     return _loaded_models[name]
 
 
@@ -231,9 +234,14 @@ def get_model(name: str) -> Any:
 # ---------------------------------------------------------------------------
 
 def predict(name: str, image_bytes: bytes) -> dict[str, float]:
-    """Run inference and return {class_name: probability}."""
+    """Run inference and return {class_name: probability}.
+
+    The model is loaded lazily on the first call for each model key and then
+    kept in memory (_loaded_models) for all subsequent requests – no cold-start
+    penalty after the first inference.
+    """
     cfg = MODEL_REGISTRY[name]
-    model = get_model(name)
+    model = get_model(name)   # lazy load + cache happens here
     fw = cfg["framework"]
     classes = cfg["classes"]
     size = cfg["input_size"]
@@ -248,13 +256,11 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
             p = float(probs[0])
             probs_list = [1.0 - p, p]
         else:
-            # Softmax-style multi-class
             probs_list = probs.tolist()
             total = sum(probs_list)
             if total > 0:
                 probs_list = [p / total for p in probs_list]
 
-        # Align length to classes
         probs_list = probs_list[: len(classes)]
         while len(probs_list) < len(classes):
             probs_list.append(0.0)
@@ -281,5 +287,3 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
         probs_list.append(0.0)
 
     return {c: round(p, 6) for c, p in zip(classes, probs_list)}
-
-    
