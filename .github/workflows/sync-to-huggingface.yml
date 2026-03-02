@@ -18,21 +18,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      # 2️⃣ Setup Git LFS
-      - name: Set up Git LFS
-        run: git lfs install
-
-      # 3️⃣ Prepare backend-only temporary repo
-      - name: Prepare backend for HuggingFace
+      # 2️⃣ Prepare backend for HF
+      - name: Prepare backend
         run: |
           mkdir -p /tmp/hf-sync
           rsync -av --exclude='.git' backend/ /tmp/hf-sync/
           cd /tmp/hf-sync
 
-          # Initialize fresh repo with main branch
+          # Initialize repo with correct branch
           git init -b main
 
-          # Enable LFS
+          # Configure Git identity (repo-local to avoid mutating runner global config)
+          # Use the workflow actor so commits are attributable to the triggering user/actor
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+
+          # Setup Git LFS and track files
           git lfs install
           git lfs track "*.h5"
           git lfs track "*.pth"
@@ -40,15 +41,16 @@ jobs:
           git lfs track "*.keras"
           git lfs track "*.weights.h5"
 
-          # Configure Git identity
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Commit backend files
           git add .
-          git commit -m "Auto-sync backend from GitHub"
 
-      # 4️⃣ Push to HuggingFace Space
+          # Only commit if there are staged changes (prevents failure when nothing changed)
+          if [ -n "$(git status --porcelain)" ]; then
+            git commit -m "Auto-sync backend from GitHub"
+          else
+            echo "No changes to commit"
+          fi
+
+      # 3️⃣ Push to HuggingFace Space
       - name: Push to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
