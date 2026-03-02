@@ -44,13 +44,15 @@ async function request<T>(
 export async function chat(
   message: string,
   onChunk: (text: string) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  history?: Array<{ role: string; content: string }>,
+  userProfile?: UserProfile | null
 ): Promise<void> {
   const url = `${BASE_URL}/chat`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, history, user_profile: userProfile }),
     signal,
   });
 
@@ -182,6 +184,28 @@ export async function getNearbyPlaces(
   return request<Place[]>(
     `/places/nearby?lat=${lat}&lng=${lng}&radius=${radius}`
   );
+}
+
+// --------------- Diagnose with image file ---------------
+
+export async function diagnoseImage(
+  modelType: string,
+  file: File
+): Promise<DiagnosisResult> {
+  validateFileSize(file);
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const url = `${BASE_URL}/diagnose/${modelType}`;
+  const res = await fetch(url, { method: "POST", body: formData });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "Diagnosis failed");
+    throw new ApiError(body, res.status);
+  }
+
+  return res.json();
 }
 
 export { ApiError };
