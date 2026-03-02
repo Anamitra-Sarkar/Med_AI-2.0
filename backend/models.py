@@ -19,8 +19,10 @@ logger = logging.getLogger(__name__)
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "cataract": {
         "repo_id": "Arko007/Cataract-Detection-CNN",
-        # SavedModel format — load via TFSMLayer for Keras 3 compatibility
-        "framework": "tfsm",
+        # Repo ships model_architecture.json + model_weights.weights.h5 separately
+        "arch_file": "model_architecture.json",
+        "weights_file": "model_weights.weights.h5",
+        "framework": "keras_json_weights",
         "input_size": (224, 224),
         "classes": ["Normal", "Cataract"],
     },
@@ -46,8 +48,9 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "skin": {
         "repo_id": "Arko007/skin-disease-detector-ai",
-        # SavedModel format — load via TFSMLayer for Keras 3 compatibility
-        "framework": "tfsm",
+        # Repo ships a native Keras 3 .keras bundle
+        "filename": "model.keras",
+        "framework": "keras3",
         "input_size": (512, 512),
         "classes": [
             "Actinic Keratosis",
@@ -138,32 +141,37 @@ def _download(repo_id: str, filename: str) -> str:
     return hf_hub_download(repo_id=repo_id, filename=filename)
 
 
-def _snapshot(repo_id: str) -> str:
-    """Download the full repo snapshot and return the local directory path."""
-    from huggingface_hub import snapshot_download
-    return snapshot_download(repo_id=repo_id)
-
-
 def _load_model(name: str) -> Any:
     cfg = MODEL_REGISTRY[name]
     fw = cfg["framework"]
 
-    # ── TF SavedModel repos loaded as inference-only TFSMLayer (Keras 3 safe) ─
-    if fw == "tfsm":
+    # ── Cataract: architecture JSON + weights.h5 stored separately ────────────
+    # The repo has no single-file export, so we rebuild the model from the
+    # saved architecture JSON and then load the weights file on top.
+    if fw == "keras_json_weights":
+        import json
         import keras
-        import tensorflow as tf
 
-        local_dir = _snapshot(cfg["repo_id"])
-        layer = keras.layers.TFSMLayer(local_dir, call_endpoint="serving_default")
+        arch_path = _download(cfg["repo_id"], cfg["arch_file"])
+        weights_path = _download(cfg["repo_id"], cfg["weights_file"])
 
-        # Wrap in a minimal functional model so we can call .predict() uniformly
-        inp = keras.Input(shape=(*cfg["input_size"], 3))
-        out = layer(inp)
-        # TFSMLayer returns a dict of tensors; grab the first output
-        if isinstance(out, dict):
-            out = list(out.values())[0]
-        model = keras.Model(inputs=inp, outputs=out)
+        with open(arch_path, "r") as f:
+            arch_json = json.load(f)
+
+        # model_from_json accepts either a JSON string or a parsed dict
+        model = keras.models.model_from_json(
+            arch_json if isinstance(arch_json, str) else json.dumps(arch_json)
+        )
+        model.load_weights(weights_path)
         return model
+
+    # ── Skin: native Keras 3 .keras bundle ─────────────────────────────────
+    # .keras is the native Keras 3 format and loads directly with keras.saving
+    if fw == "keras3":
+        import keras
+
+        path = _download(cfg["repo_id"], cfg["filename"])
+        return keras.saving.load_model(path)
 
     # ── Plain .h5 full model ───────────────────────────────────────────────────
     if fw == "tf":
@@ -192,14 +200,11 @@ def _load_model(name: str) -> Any:
         path = _download(cfg["repo_id"], cfg["filename"])
         state = torch.load(path, map_location="cpu", weights_only=False)
 
-        # Handle three possible checkpoint formats:
-        # 1. raw state_dict  2. {"model_state_dict": ...}  3. full nn.Module
         if isinstance(state, dict):
             sd = state.get("model_state_dict", state)
             model = _build_cardiac_model(len(cfg["classes"]))
             model.load_state_dict(sd, strict=False)
         else:
-            # Checkpoint was saved as the full model object
             model = state
 
         model.eval()
@@ -232,7 +237,7 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
     classes = cfg["classes"]
     size = cfg["input_size"]
 
-    if fw in ("tf", "tfsm", "hf_keras"):
+    if fw in ("tf", "keras3", "keras_json_weights"):
         inp = _preprocess_image_tf(image_bytes, size)
         raw = model.predict(inp, verbose=0)
         probs = raw[0]
