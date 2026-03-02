@@ -28,6 +28,8 @@ jobs:
           git lfs install
           git lfs track "*.h5" "*.pth" "*.pt" "*.keras" "*.weights.h5"
           git add .
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           git commit -m "Sync backend from GitHub"
 
       - name: Push to HuggingFace
