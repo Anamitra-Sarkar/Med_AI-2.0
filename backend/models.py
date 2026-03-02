@@ -13,14 +13,14 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Model registry – each entry describes how to fetch, load and run a model
+# Model registry
 # ---------------------------------------------------------------------------
 
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "cataract": {
         "repo_id": "Arko007/Cataract-Detection-CNN",
-        "filename": "model_weights.weights.h5",
-        "framework": "tf_weights",
+        # Custom EfficientNet arch saved as full .keras — use from_pretrained_keras
+        "framework": "hf_keras",
         "input_size": (224, 224),
         "classes": ["Normal", "Cataract"],
     },
@@ -28,7 +28,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "repo_id": "Arko007/diabetic-retinopathy-v1",
         "filename": "best_model.h5",
         "framework": "tf",
-        "input_size": (384, 384),   # model functional layer expects (384, 384, 3)
+        "input_size": (384, 384),
         "classes": [
             "No DR",
             "Mild",
@@ -46,14 +46,14 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "skin": {
         "repo_id": "Arko007/skin-disease-detector-ai",
-        "filename": "model.keras",
-        "framework": "tf_keras",
-        "input_size": (224, 224),
+        # Custom EfficientNet BEAST v2, ~150M params, 512x512 input, 8 classes
+        # MBConvBlock custom layer — must use from_pretrained_keras
+        "framework": "hf_keras",
+        "input_size": (512, 512),
         "classes": [
             "Actinic Keratosis",
             "Basal Cell Carcinoma",
             "Dermatofibroma",
-            "Melanoma",
             "Nevus",
             "Pigmented Benign Keratosis",
             "Seborrheic Keratosis",
@@ -70,13 +70,12 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
 }
 
-# Loaded model objects – populated lazily on first inference request, never at startup
 _loaded_models: dict[str, Any] = {}
 _load_locks: dict[str, threading.Lock] = {k: threading.Lock() for k in MODEL_REGISTRY}
 
 
 # ---------------------------------------------------------------------------
-# Helpers – image preprocessing
+# Image preprocessing
 # ---------------------------------------------------------------------------
 
 def _preprocess_image_tf(image_bytes: bytes, target_size: tuple[int, int]) -> np.ndarray:
@@ -104,35 +103,10 @@ def _preprocess_image_torch(image_bytes: bytes, target_size: tuple[int, int]):
 
 
 # ---------------------------------------------------------------------------
-# Build architectures needed for weight-only checkpoints
+# Cardiac CNN architecture (PyTorch — weights-only .pt)
 # ---------------------------------------------------------------------------
 
-def _build_cataract_model():
-    """Reproduce the CNN architecture used for the cataract .weights.h5 file."""
-    import tensorflow as tf
-
-    model = tf.keras.Sequential([
-        tf.keras.layers.InputLayer(shape=(224, 224, 3)),
-        tf.keras.layers.Conv2D(32, (3, 3), activation="relu"),
-        tf.keras.layers.MaxPooling2D((2, 2)),
-        tf.keras.layers.Conv2D(64, (3, 3), activation="relu"),
-        tf.keras.layers.MaxPooling2D((2, 2)),
-        tf.keras.layers.Conv2D(128, (3, 3), activation="relu"),
-        tf.keras.layers.MaxPooling2D((2, 2)),
-        tf.keras.layers.Conv2D(128, (3, 3), activation="relu"),
-        tf.keras.layers.MaxPooling2D((2, 2)),
-        tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(512, activation="relu"),
-        tf.keras.layers.Dropout(0.5),
-        tf.keras.layers.Dense(1, activation="sigmoid"),
-    ])
-    model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
-    return model
-
-
 def _build_cardiac_model(num_classes: int = 2):
-    """Simple CNN matching the cardiac MRI checkpoint."""
-    import torch
     import torch.nn as nn
 
     class CardiacCNN(nn.Module):
@@ -157,8 +131,7 @@ def _build_cardiac_model(num_classes: int = 2):
 
 
 # ---------------------------------------------------------------------------
-# Model loading (lazy, thread-safe) – models are NEVER loaded at import time.
-# Each model is downloaded from HF Hub and cached on first inference call only.
+# Model loading (lazy, thread-safe)
 # ---------------------------------------------------------------------------
 
 def _download(repo_id: str, filename: str) -> str:
@@ -167,28 +140,29 @@ def _download(repo_id: str, filename: str) -> str:
 
 
 def _load_model(name: str) -> Any:
-    """Download from HF Hub and load into memory."""
     cfg = MODEL_REGISTRY[name]
-    path = _download(cfg["repo_id"], cfg["filename"])
     fw = cfg["framework"]
 
-    if fw == "tf_weights":
-        model = _build_cataract_model()
-        model.load_weights(path)
+    # ── Keras / TF models saved as full SavedModel/.keras via HF Hub ──────────
+    if fw == "hf_keras":
+        # from_pretrained_keras handles custom objects (MBConvBlock etc.) by
+        # importing the saved TF graph directly — no need to re-register layers.
+        from huggingface_hub import from_pretrained_keras
+        model = from_pretrained_keras(cfg["repo_id"])
         return model
 
+    # ── Plain .h5 full model ───────────────────────────────────────────────────
     if fw == "tf":
         import tensorflow as tf
+        path = _download(cfg["repo_id"], cfg["filename"])
         return tf.keras.models.load_model(path, compile=False)
 
-    if fw == "tf_keras":
-        import tensorflow as tf
-        return tf.keras.models.load_model(path, compile=False)
-
+    # ── PyTorch EfficientNet (efficientnet-pytorch library) ───────────────────
     if fw == "pytorch_efficientnet":
         import torch
         from efficientnet_pytorch import EfficientNet
 
+        path = _download(cfg["repo_id"], cfg["filename"])
         model = EfficientNet.from_name("efficientnet-b0", num_classes=len(cfg["classes"]))
         state = torch.load(path, map_location="cpu", weights_only=False)
         if isinstance(state, dict) and "model_state_dict" in state:
@@ -197,15 +171,23 @@ def _load_model(name: str) -> Any:
         model.eval()
         return model
 
+    # ── PyTorch cardiac CNN (weights-only .pt) ────────────────────────────────
     if fw == "pytorch_cardiac":
         import torch
 
-        model = _build_cardiac_model(len(cfg["classes"]))
+        path = _download(cfg["repo_id"], cfg["filename"])
         state = torch.load(path, map_location="cpu", weights_only=False)
-        if isinstance(state, dict) and "model_state_dict" in state:
-            state = state["model_state_dict"]
+
+        # Handle three possible checkpoint formats:
+        # 1. raw state_dict  2. {"model_state_dict": ...}  3. full nn.Module
         if isinstance(state, dict):
-            model.load_state_dict(state, strict=False)
+            sd = state.get("model_state_dict", state)
+            model = _build_cardiac_model(len(cfg["classes"]))
+            model.load_state_dict(sd, strict=False)
+        else:
+            # Checkpoint was saved as the full model object
+            model = state
+
         model.eval()
         return model
 
@@ -213,11 +195,7 @@ def _load_model(name: str) -> Any:
 
 
 def get_model(name: str) -> Any:
-    """Return a loaded model, downloading from HF Hub on first call (thread-safe).
-
-    Models are cached in-process after the first load so subsequent requests
-    are served instantly from memory without re-downloading.
-    """
+    """Return a loaded model (lazy, cached, thread-safe)."""
     if name not in MODEL_REGISTRY:
         raise KeyError(f"Unknown model: {name}")
     if name not in _loaded_models:
@@ -234,24 +212,17 @@ def get_model(name: str) -> Any:
 # ---------------------------------------------------------------------------
 
 def predict(name: str, image_bytes: bytes) -> dict[str, float]:
-    """Run inference and return {class_name: probability}.
-
-    The model is loaded lazily on the first call for each model key and then
-    kept in memory (_loaded_models) for all subsequent requests – no cold-start
-    penalty after the first inference.
-    """
     cfg = MODEL_REGISTRY[name]
-    model = get_model(name)   # lazy load + cache happens here
+    model = get_model(name)
     fw = cfg["framework"]
     classes = cfg["classes"]
     size = cfg["input_size"]
 
-    if fw in ("tf", "tf_keras", "tf_weights"):
+    if fw in ("tf", "hf_keras"):
         inp = _preprocess_image_tf(image_bytes, size)
         raw = model.predict(inp, verbose=0)
         probs = raw[0]
 
-        # Binary sigmoid output → expand to 2-class
         if probs.shape[-1] == 1:
             p = float(probs[0])
             probs_list = [1.0 - p, p]
@@ -259,7 +230,7 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
             probs_list = probs.tolist()
             total = sum(probs_list)
             if total > 0:
-                probs_list = [p / total for p in probs_list]
+                probs_list = [x / total for x in probs_list]
 
         probs_list = probs_list[: len(classes)]
         while len(probs_list) < len(classes):
@@ -267,7 +238,7 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
 
         return {c: round(p, 6) for c, p in zip(classes, probs_list)}
 
-    # PyTorch paths
+    # PyTorch
     import torch
 
     inp = _preprocess_image_torch(image_bytes, size)
