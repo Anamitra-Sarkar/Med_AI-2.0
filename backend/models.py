@@ -13,13 +13,142 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Custom Keras layers — must be registered BEFORE any model is loaded
+# ---------------------------------------------------------------------------
+# MBConvBlock is the core building block of the skin EfficientNet BEAST v2
+# model. Keras 3 cannot deserialize custom layers from a .keras file unless
+# the class is decorated with @register_keras_serializable AND imported
+# (i.e. the decorator has actually run) before load_model() is called.
+# We define it here at module import time so the registry is always populated.
+
+import keras
+
+
+@keras.saving.register_keras_serializable(package="custom")
+class MBConvBlock(keras.layers.Layer):
+    """Mobile Inverted Bottleneck Conv block with optional Squeeze-and-Excitation.
+
+    Config keys mirror those stored in the .keras bundle:
+        filters, kernel_size, strides, expand_ratio, se_ratio,
+        drop_connect_rate, input_filters
+    """
+
+    def __init__(
+        self,
+        filters: int,
+        kernel_size: int = 3,
+        strides: int = 1,
+        expand_ratio: int = 1,
+        se_ratio: float = 0.25,
+        drop_connect_rate: float = 0.0,
+        input_filters: int = 0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.expand_ratio = expand_ratio
+        self.se_ratio = se_ratio
+        self.drop_connect_rate = drop_connect_rate
+        self.input_filters = input_filters
+
+        self._expanded_filters = max(1, int(input_filters * expand_ratio))
+        self._se_filters = max(1, int(input_filters * se_ratio))
+        self._use_residual = (strides == 1 and input_filters == filters)
+
+    def build(self, input_shape):
+        # Expansion phase (pointwise) — skip when expand_ratio == 1
+        if self.expand_ratio != 1:
+            self._expand_conv = keras.layers.Conv2D(
+                self._expanded_filters, 1, padding="same", use_bias=False
+            )
+            self._expand_bn = keras.layers.BatchNormalization()
+
+        # Depthwise conv
+        self._dw_conv = keras.layers.DepthwiseConv2D(
+            self.kernel_size,
+            strides=self.strides,
+            padding="same",
+            use_bias=False,
+        )
+        self._dw_bn = keras.layers.BatchNormalization()
+
+        # Squeeze-and-Excitation
+        if self.se_ratio > 0:
+            self._se_reduce = keras.layers.Conv2D(
+                self._se_filters, 1, padding="same", activation="swish"
+            )
+            self._se_expand = keras.layers.Conv2D(
+                self._expanded_filters, 1, padding="same", activation="sigmoid"
+            )
+
+        # Pointwise projection
+        self._project_conv = keras.layers.Conv2D(
+            self.filters, 1, padding="same", use_bias=False
+        )
+        self._project_bn = keras.layers.BatchNormalization()
+
+        # Stochastic depth (drop connect)
+        if self.drop_connect_rate > 0 and self._use_residual:
+            self._drop = keras.layers.Dropout(
+                self.drop_connect_rate, noise_shape=(None, 1, 1, 1)
+            )
+        else:
+            self._drop = None
+
+        super().build(input_shape)
+
+    def call(self, inputs, training=None):
+        x = inputs
+
+        # Expansion
+        if self.expand_ratio != 1:
+            x = keras.activations.swish(self._expand_bn(self._expand_conv(x), training=training))
+
+        # Depthwise
+        x = keras.activations.swish(self._dw_bn(self._dw_conv(x), training=training))
+
+        # SE
+        if self.se_ratio > 0:
+            se = keras.layers.GlobalAveragePooling2D(keepdims=True)(x)
+            se = self._se_expand(self._se_reduce(se))
+            x = x * se
+
+        # Projection
+        x = self._project_bn(self._project_conv(x), training=training)
+
+        # Residual + drop connect
+        if self._use_residual:
+            if self._drop is not None:
+                x = self._drop(x, training=training)
+            x = x + inputs
+
+        return x
+
+    def get_config(self):
+        base = super().get_config()
+        base.update(
+            dict(
+                filters=self.filters,
+                kernel_size=self.kernel_size,
+                strides=self.strides,
+                expand_ratio=self.expand_ratio,
+                se_ratio=self.se_ratio,
+                drop_connect_rate=self.drop_connect_rate,
+                input_filters=self.input_filters,
+            )
+        )
+        return base
+
+
+# ---------------------------------------------------------------------------
 # Model registry
 # ---------------------------------------------------------------------------
 
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     "cataract": {
         "repo_id": "Arko007/Cataract-Detection-CNN",
-        # Repo ships model_architecture.json + model_weights.weights.h5 separately
         "arch_file": "model_architecture.json",
         "weights_file": "model_weights.weights.h5",
         "framework": "keras_json_weights",
@@ -48,7 +177,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "skin": {
         "repo_id": "Arko007/skin-disease-detector-ai",
-        # Repo ships a native Keras 3 .keras bundle
+        # Custom EfficientNet BEAST v2 with MBConvBlock — Keras 3 .keras bundle
         "filename": "model.keras",
         "framework": "keras3",
         "input_size": (512, 512),
@@ -146,11 +275,8 @@ def _load_model(name: str) -> Any:
     fw = cfg["framework"]
 
     # ── Cataract: architecture JSON + weights.h5 stored separately ────────────
-    # The repo has no single-file export, so we rebuild the model from the
-    # saved architecture JSON and then load the weights file on top.
     if fw == "keras_json_weights":
         import json
-        import keras
 
         arch_path = _download(cfg["repo_id"], cfg["arch_file"])
         weights_path = _download(cfg["repo_id"], cfg["weights_file"])
@@ -158,20 +284,18 @@ def _load_model(name: str) -> Any:
         with open(arch_path, "r") as f:
             arch_json = json.load(f)
 
-        # model_from_json accepts either a JSON string or a parsed dict
         model = keras.models.model_from_json(
             arch_json if isinstance(arch_json, str) else json.dumps(arch_json)
         )
         model.load_weights(weights_path)
         return model
 
-    # ── Skin: native Keras 3 .keras bundle ─────────────────────────────────
-    # .keras is the native Keras 3 format and loads directly with keras.saving
+    # ── Skin: Keras 3 .keras bundle with custom MBConvBlock ──────────────────
+    # MBConvBlock is registered above via @register_keras_serializable so
+    # keras.saving.load_model can locate it during deserialization.
     if fw == "keras3":
-        import keras
-
         path = _download(cfg["repo_id"], cfg["filename"])
-        return keras.saving.load_model(path)
+        return keras.saving.load_model(path, compile=False)
 
     # ── Plain .h5 full model ───────────────────────────────────────────────────
     if fw == "tf":
