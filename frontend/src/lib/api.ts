@@ -112,6 +112,8 @@ export interface UserProfile {
   weight?: string;
   left_eye_power?: string;
   right_eye_power?: string;
+  /** Per-user UI theme — persisted server-side so each user gets their own preference */
+  theme?: "light" | "dark";
 }
 
 export async function getProfile(firebaseUid: string): Promise<UserProfile> {

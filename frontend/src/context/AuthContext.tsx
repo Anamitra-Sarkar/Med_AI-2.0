@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth, getGoogleProvider } from "@/lib/firebase";
 import { getProfile, type UserProfile } from "@/lib/api";
+import { useTheme } from "@/context/ThemeContext";
 
 interface AuthContextValue {
   user: User | null;
@@ -39,18 +40,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const { initTheme, resetTheme } = useTheme();
 
   const checkProfile = useCallback(async (uid: string) => {
     try {
       const profile = await getProfile(uid);
       setUserProfile(profile);
       setHasProfile(true);
+      // Apply the user's saved theme — falls back to system pref if not set
+      initTheme(uid, profile.theme);
     } catch {
       // 404 or any error = no profile yet
       setUserProfile(null);
       setHasProfile(false);
+      // Still initialise theme with system default for this UID
+      initTheme(uid, undefined);
     }
-  }, []);
+  }, [initTheme]);
 
   const refreshProfile = useCallback(async () => {
     const auth = getFirebaseAuth();
@@ -71,11 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setHasProfile(null);
         setUserProfile(null);
+        // User signed out — reset theme to system default, clear persisted UID
+        resetTheme();
       }
       setLoading(false);
     });
     return unsubscribe;
-  }, [checkProfile]);
+  }, [checkProfile, resetTheme]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth();
@@ -105,7 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setHasProfile(null);
     setUserProfile(null);
-  }, []);
+    resetTheme();
+  }, [resetTheme]);
 
   return (
     <AuthContext.Provider
