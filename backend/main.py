@@ -88,6 +88,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
 CHAT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 SUMMARIZER_MODEL = "qwen/qwen3-32b"
+# Max size for a stored base64 data_url (~8 MB raw → ~10.7 MB base64)
+# We cap it to avoid bloating MongoDB documents.
+MAX_DATA_URL_BYTES = 11 * 1024 * 1024
 BASE_SYSTEM_PROMPT = (
     "You are Valeon, a helpful medical AI assistant. "
     "Provide accurate, empathetic, and evidence-based health information. "
@@ -279,6 +282,8 @@ class ProfileCreate(BaseModel):
     weight: str | None = Field(default=None, max_length=50)
     left_eye_power: str | None = Field(default=None, max_length=50)
     right_eye_power: str | None = Field(default=None, max_length=50)
+    # Per-user UI theme — stored so the correct theme is restored on every login
+    theme: str | None = Field(default=None, pattern="^(light|dark)$")
 
 class ProfileUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
@@ -288,6 +293,8 @@ class ProfileUpdate(BaseModel):
     weight: str | None = Field(default=None, max_length=50)
     left_eye_power: str | None = Field(default=None, max_length=50)
     right_eye_power: str | None = Field(default=None, max_length=50)
+    # Allow theme updates from the settings page
+    theme: str | None = Field(default=None, pattern="^(light|dark)$")
 
 @app.post("/api/profile", status_code=201)
 async def create_profile(profile: ProfileCreate):
@@ -438,11 +445,31 @@ class RecordUploadRequest(BaseModel):
     model_label: str = Field(..., min_length=1, max_length=200)
     predictions: dict[str, float] | None = Field(default=None)
     summary: str | None = Field(default=None, max_length=5000)
+    # Base64 data URL of the original scan image.
+    # Stored per-user in MongoDB so the image is viewable and downloadable
+    # from the sidebar at any time — no localStorage, no cross-user leakage.
+    data_url: str | None = Field(default=None)
 
 @app.post("/api/uploads", status_code=201)
 async def record_upload(req: RecordUploadRequest):
-    """Record metadata of a diagnostic file upload."""
+    """Record a diagnostic file upload including the base64 image."""
     col = _uploads_collection()
+
+    # Validate data_url size to prevent bloated documents
+    data_url = req.data_url
+    if data_url is not None:
+        if len(data_url.encode("utf-8")) > MAX_DATA_URL_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail="Image data URL exceeds the 11 MB storage limit.",
+            )
+        # Must be a valid data URL (starts with "data:image/")
+        if not data_url.startswith("data:image/"):
+            raise HTTPException(
+                status_code=400,
+                detail="data_url must be a valid image data URL.",
+            )
+
     doc = {
         "firebase_uid": _sanitize(req.firebase_uid),
         "filename": _sanitize(req.filename),
@@ -451,6 +478,8 @@ async def record_upload(req: RecordUploadRequest):
         "model_label": _sanitize(req.model_label),
         "predictions": req.predictions,
         "summary": _sanitize(req.summary) if req.summary else None,
+        # Store the raw data_url — NOT sanitized (bleach would corrupt base64)
+        "data_url": data_url,
         "uploaded_at": _utcnow(),
     }
     result = col.insert_one(doc)
@@ -461,20 +490,27 @@ async def record_upload(req: RecordUploadRequest):
 
 @app.get("/api/uploads/{firebase_uid}")
 async def list_uploads(firebase_uid: str):
-    """List all recorded file uploads for a user, newest first."""
+    """List all recorded file uploads for a user, newest first.
+
+    data_url is included so the frontend can render/download images directly
+    without any additional requests or client-side storage.
+    """
     col = _uploads_collection()
     uid = _sanitize(firebase_uid)
+    # Fetch all fields including data_url — scoped strictly to this UID
     cursor = col.find({"firebase_uid": uid}).sort("uploaded_at", DESCENDING).limit(100)
     uploads = []
     for doc in cursor:
         doc["id"] = str(doc.pop("_id"))
         doc["uploaded_at"] = doc["uploaded_at"].isoformat()
+        # Ensure data_url key is always present (may be None for legacy records)
+        doc.setdefault("data_url", None)
         uploads.append(doc)
     return {"uploads": uploads}
 
 @app.delete("/api/uploads/{firebase_uid}/{upload_id}", status_code=204)
 async def delete_upload(firebase_uid: str, upload_id: str):
-    """Delete an upload record."""
+    """Delete an upload record. Enforces firebase_uid ownership."""
     col = _uploads_collection()
     uid = _sanitize(firebase_uid)
     try:
@@ -535,7 +571,6 @@ class NearbyCareRequest(BaseModel):
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 AMENITY_TYPE_MAP = {"hospital": "hospital", "clinic": "clinic", "pharmacy": "pharmacy"}
 
-# Triple-quoted template avoids f-string / double-quote conflicts
 _OVERPASS_QUERY_TEMPLATE = (
     '[out:json][timeout:25];('
     'node["amenity"="hospital"](around:{radius},{lat},{lon});'
