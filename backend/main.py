@@ -73,7 +73,6 @@ if MONGODB_URI:
     try:
         _mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
         _db = _mongo_client["valeon"]
-        # Indexes for performance
         _db["chat_sessions"].create_index([("firebase_uid", 1), ("updated_at", DESCENDING)])
         _db["uploads"].create_index([("firebase_uid", 1), ("uploaded_at", DESCENDING)])
         logger.info("Connected to MongoDB Atlas.")
@@ -362,7 +361,7 @@ async def list_chat_sessions(firebase_uid: str):
     uid = _sanitize(firebase_uid)
     cursor = col.find(
         {"firebase_uid": uid},
-        {"messages": 0},  # exclude messages for the list view
+        {"messages": 0},
     ).sort("updated_at", DESCENDING).limit(50)
     sessions = []
     for doc in cursor:
@@ -401,12 +400,10 @@ async def append_message(firebase_uid: str, session_id: str, req: AppendMessageR
         raise HTTPException(status_code=400, detail="Invalid session id")
     msg = {"role": req.message.role, "content": _sanitize(req.message.content), "ts": _utcnow().isoformat()}
     now = _utcnow()
-    # Auto-title from first user message (truncate to 60 chars)
     update: dict[str, Any] = {
         "$push": {"messages": msg},
         "$set": {"updated_at": now},
     }
-    # Only update title if it's still "New Chat" and this is a user message
     session = col.find_one({"_id": oid, "firebase_uid": uid}, {"title": 1})
     if session and session.get("title") == "New Chat" and req.message.role == "user":
         raw_title = req.message.content[:60].strip()
@@ -436,9 +433,9 @@ async def delete_chat_session(firebase_uid: str, session_id: str):
 class RecordUploadRequest(BaseModel):
     firebase_uid: str = Field(..., min_length=1, max_length=200)
     filename: str = Field(..., min_length=1, max_length=500)
-    file_type: str = Field(..., min_length=1, max_length=100)  # e.g. "image/jpeg"
-    model_type: str = Field(..., min_length=1, max_length=100) # e.g. "cataract"
-    model_label: str = Field(..., min_length=1, max_length=200) # human-readable label
+    file_type: str = Field(..., min_length=1, max_length=100)
+    model_type: str = Field(..., min_length=1, max_length=100)
+    model_label: str = Field(..., min_length=1, max_length=200)
     predictions: dict[str, float] | None = Field(default=None)
     summary: str | None = Field(default=None, max_length=5000)
 
@@ -538,16 +535,19 @@ class NearbyCareRequest(BaseModel):
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 AMENITY_TYPE_MAP = {"hospital": "hospital", "clinic": "clinic", "pharmacy": "pharmacy"}
 
+# Triple-quoted template avoids f-string / double-quote conflicts
+_OVERPASS_QUERY_TEMPLATE = (
+    '[out:json][timeout:25];('
+    'node["amenity"="hospital"](around:{radius},{lat},{lon});'
+    'node["amenity"="clinic"](around:{radius},{lat},{lon});'
+    'node["amenity"="pharmacy"](around:{radius},{lat},{lon});'
+    ');out body;'
+)
+
 @app.post("/api/nearby-care")
 async def nearby_care(req: NearbyCareRequest):
     lat, lon, radius = req.lat, req.lon, req.radius
-    query = (
-        f"[out:json][timeout:25];("
-        f'node["amenity"="hospital"](around:{radius},{lat},{lon});'
-        f'node["amenity"="clinic"](around:{radius},{lat},{lon});'
-        f'node["amenity"="pharmacy"](around:{radius},{lat},{lon}););"
-        f"out body;"
-    )
+    query = _OVERPASS_QUERY_TEMPLATE.format(radius=radius, lat=lat, lon=lon)
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=28.0, write=5.0, pool=5.0)) as client:
         try:
             resp = await client.post(OVERPASS_URL, data={"data": query})
@@ -560,7 +560,8 @@ async def nearby_care(req: NearbyCareRequest):
     for element in data.get("elements", []):
         tags = element.get("tags", {})
         name = tags.get("name") or tags.get("name:en")
-        if not name: continue
+        if not name:
+            continue
         amenity = tags.get("amenity", "hospital")
         results.append({
             "name": name,
@@ -568,7 +569,9 @@ async def nearby_care(req: NearbyCareRequest):
             "lat": element.get("lat"),
             "lon": element.get("lon"),
             "address": tags.get("addr:full") or ", ".join(filter(None, [
-                tags.get("addr:housenumber"), tags.get("addr:street"), tags.get("addr:city"),
+                tags.get("addr:housenumber"),
+                tags.get("addr:street"),
+                tags.get("addr:city"),
             ])) or None,
             "phone": tags.get("phone") or tags.get("contact:phone"),
             "website": tags.get("website") or tags.get("contact:website"),
