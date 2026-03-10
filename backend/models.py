@@ -572,11 +572,12 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
 
                 arr = h5_data.get(h5_path)
                 if arr is not None and arr.shape == tuple(var.shape):
-                    var.assign(arr.astype(
+                    target_dtype = (
                         var.dtype.as_numpy_dtype
                         if hasattr(var.dtype, "as_numpy_dtype")
                         else np.float32
-                    ))
+                    )
+                    var.assign(arr.astype(target_dtype))
                     assigned += 1
                 else:
                     if arr is not None:
@@ -603,25 +604,35 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
                 )
 
             # ---- Self-test at load time ----
+            # Min confidence for any single class on the expected test image.
+            # A correctly-loaded 8-class model should exceed random chance
+            # (1/8 = 12.5%) by a wide margin; 35% is a conservative floor.
+            _SELFTEST_MIN_CONFIDENCE = 0.35
+
             test_image_path = os.environ.get("SKIN_TEST_IMAGE", "")
             if test_image_path and os.path.exists(test_image_path):
-                with open(test_image_path, "rb") as f:
-                    test_bytes = f.read()
-                test_input = _preprocess_skin(test_bytes)
-                test_raw = model.predict(test_input, verbose=0)
-                test_probs = test_raw[0].tolist()
-                max_conf = max(test_probs)
-                max_class = test_probs.index(max_conf)
-                logger.info(
-                    "Skin model self-test: max_confidence=%.4f class_index=%d",
-                    max_conf, max_class,
-                )
-                if max_conf < 0.35:
-                    logger.error(
-                        "SKIN MODEL WEIGHT LOADING FAILURE: max confidence "
-                        "%.4f < 0.35. Weights are not loaded correctly. "
-                        "All predictions will be unreliable.",
-                        max_conf,
+                try:
+                    with open(test_image_path, "rb") as f:
+                        test_bytes = f.read()
+                    test_input = _preprocess_skin(test_bytes)
+                    test_raw = model.predict(test_input, verbose=0)
+                    test_probs = test_raw[0].tolist()
+                    max_conf = max(test_probs)
+                    max_class = test_probs.index(max_conf)
+                    logger.info(
+                        "Skin model self-test: max_confidence=%.4f class_index=%d",
+                        max_conf, max_class,
+                    )
+                    if max_conf < _SELFTEST_MIN_CONFIDENCE:
+                        logger.error(
+                            "SKIN MODEL WEIGHT LOADING FAILURE: max confidence "
+                            "%.4f < %.2f. Weights are not loaded correctly. "
+                            "All predictions will be unreliable.",
+                            max_conf, _SELFTEST_MIN_CONFIDENCE,
+                        )
+                except Exception as selftest_err:
+                    logger.warning(
+                        "Skin model self-test failed: %s", selftest_err
                     )
 
             return model
