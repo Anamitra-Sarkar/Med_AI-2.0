@@ -84,7 +84,7 @@ else:
 # ---------------------------------------------------------------------------
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/bmp"}
-CHAT_MODEL = "meta-llama/llama-4-maverick-17b-128e-instruct"
+CHAT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 SUMMARIZER_MODEL = "qwen/qwen3-32b"
 BASE_SYSTEM_PROMPT = (
     "You are Valeon, a helpful medical AI assistant. "
