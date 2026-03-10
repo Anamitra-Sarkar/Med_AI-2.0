@@ -43,7 +43,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: dark)", color: "#0f172a" },
+    { media: "(prefers-color-scheme: dark)", color: "#080f1a" },
     { media: "(prefers-color-scheme: light)", color: "#0d9488" },
   ],
   width: "device-width",
@@ -59,9 +59,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="antialiased bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+      <body className="antialiased bg-slate-50 dark:bg-[#080f1a] transition-colors duration-300">
         <Providers>{children}</Providers>
-        {/* Global screenshot detection — listens on every page */}
         <ScreenshotDetector />
       </body>
     </html>
