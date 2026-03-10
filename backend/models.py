@@ -22,6 +22,46 @@ logger = logging.getLogger(__name__)
 import keras
 
 
+class _SEBlock(keras.layers.Layer):
+    """Squeeze-and-Excitation block using Dense layers.
+
+    Matches the original saved model structure:
+      se_block/global_pool  (GlobalAveragePooling2D, keepdims=True)
+      se_block/squeeze      (Dense, swish)
+      se_block/excite       (Dense, sigmoid)
+    """
+
+    def __init__(self, se_filters: int, expanded_filters: int, **kwargs):
+        super().__init__(**kwargs)
+        self.se_filters = se_filters
+        self.expanded_filters = expanded_filters
+
+    def build(self, input_shape):
+        self.global_pool = keras.layers.GlobalAveragePooling2D(
+            keepdims=True, name="global_pool"
+        )
+        self.squeeze = keras.layers.Dense(
+            self.se_filters, activation="swish", name="squeeze"
+        )
+        self.excite = keras.layers.Dense(
+            self.expanded_filters, activation="sigmoid", name="excite"
+        )
+        super().build(input_shape)
+
+    def call(self, x):
+        se = self.global_pool(x)
+        se = self.squeeze(se)
+        se = self.excite(se)
+        return x * se
+
+    def get_config(self):
+        base = super().get_config()
+        base.update(
+            dict(se_filters=self.se_filters, expanded_filters=self.expanded_filters)
+        )
+        return base
+
+
 @keras.saving.register_keras_serializable(package="custom")
 class MBConvBlock(keras.layers.Layer):
     """Mobile Inverted Bottleneck Conv block with Squeeze-and-Excitation.
@@ -31,6 +71,10 @@ class MBConvBlock(keras.layers.Layer):
     BatchNormalization outputs bfloat16 while the original `inputs`
     tensor is float32. We cast `inputs` to match `x` before the residual
     add so the dtypes always agree regardless of the active policy.
+
+    Sub-layers use explicit names that match the original saved model's
+    HDF5 weight structure (depthwise_conv, depthwise_bn, expand_conv,
+    expand_bn, project_conv, project_bn, se_block).
     """
 
     def __init__(
@@ -54,36 +98,36 @@ class MBConvBlock(keras.layers.Layer):
         self.input_filters = input_filters
 
         self._expanded_filters = max(1, int(input_filters * expand_ratio))
-        self._se_filters = max(1, int(input_filters * se_ratio))
+        self._se_filters = max(1, int(self._expanded_filters * se_ratio))
         self._use_residual = (strides == 1 and input_filters == filters)
 
     def build(self, input_shape):
         if self.expand_ratio != 1:
             self._expand_conv = keras.layers.Conv2D(
-                self._expanded_filters, 1, padding="same", use_bias=False
+                self._expanded_filters, 1, padding="same", use_bias=False,
+                name="expand_conv",
             )
-            self._expand_bn = keras.layers.BatchNormalization()
+            self._expand_bn = keras.layers.BatchNormalization(name="expand_bn")
 
         self._dw_conv = keras.layers.DepthwiseConv2D(
             self.kernel_size,
             strides=self.strides,
             padding="same",
             use_bias=False,
+            name="depthwise_conv",
         )
-        self._dw_bn = keras.layers.BatchNormalization()
+        self._dw_bn = keras.layers.BatchNormalization(name="depthwise_bn")
 
         if self.se_ratio > 0:
-            self._se_reduce = keras.layers.Conv2D(
-                self._se_filters, 1, padding="same", activation="swish"
-            )
-            self._se_expand = keras.layers.Conv2D(
-                self._expanded_filters, 1, padding="same", activation="sigmoid"
+            self._se_block = _SEBlock(
+                self._se_filters, self._expanded_filters, name="se_block"
             )
 
         self._project_conv = keras.layers.Conv2D(
-            self.filters, 1, padding="same", use_bias=False
+            self.filters, 1, padding="same", use_bias=False,
+            name="project_conv",
         )
-        self._project_bn = keras.layers.BatchNormalization()
+        self._project_bn = keras.layers.BatchNormalization(name="project_bn")
 
         if self.drop_connect_rate > 0 and self._use_residual:
             self._drop = keras.layers.Dropout(
@@ -108,9 +152,7 @@ class MBConvBlock(keras.layers.Layer):
         )
 
         if self.se_ratio > 0:
-            se = keras.layers.GlobalAveragePooling2D(keepdims=True)(x)
-            se = self._se_expand(self._se_reduce(se))
-            x = x * se
+            x = self._se_block(x)
 
         x = self._project_bn(self._project_conv(x), training=training)
 
@@ -139,13 +181,24 @@ class MBConvBlock(keras.layers.Layer):
         return base
 
 
-# Second registration: bare 'MBConvBlock' key (what the .keras bundle stores)
+# Second registration: bare keys (what the .keras bundle stores)
 try:
     keras.saving.register_keras_serializable(package="")(MBConvBlock)
 except Exception:
     pass
+try:
+    keras.saving.register_keras_serializable(package="custom")(_SEBlock)
+except Exception:
+    pass
+try:
+    keras.saving.register_keras_serializable(package="")(_SEBlock)
+except Exception:
+    pass
 
-_SKIN_CUSTOM_OBJECTS: dict[str, Any] = {"MBConvBlock": MBConvBlock}
+_SKIN_CUSTOM_OBJECTS: dict[str, Any] = {
+    "MBConvBlock": MBConvBlock,
+    "_SEBlock": _SEBlock,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -298,36 +351,51 @@ def _build_cardiac_model(num_classes: int = 2):
 
 
 # ---------------------------------------------------------------------------
-# h5py index-based weight loader
+# h5py path-based weight helpers
 # ---------------------------------------------------------------------------
 
-def _collect_h5_weights(h5_group) -> list:
-    """DFS over an h5py group, collecting all leaf datasets in order.
+# Keras auto-naming: class_name → snake_case base used as HDF5 key.
+_CLASS_TO_H5_BASE: dict[str, str] = {
+    "InputLayer": "input_layer",
+    "Conv2D": "conv2d",
+    "BatchNormalization": "batch_normalization",
+    "Activation": "activation",
+    "MBConvBlock": "mb_conv_block",
+    "GlobalAveragePooling2D": "global_average_pooling2d",
+    "Dropout": "dropout",
+    "Dense": "dense",
+}
 
-    Keras 3 stores weights in model.weights.h5 as a nested group tree
-    where each node is either a numbered group ("0", "1", ...) or a leaf
-    dataset named "vars/0", "vars/1", etc.  A simple DFS that visits keys
-    in sorted integer order yields exactly the same sequence as
-    model.weights, so we can zip-assign without any name matching.
+# Variable name → positional index inside an HDF5 ``vars/`` group.
+_VAR_NAME_TO_INDEX: dict[str, int] = {
+    "kernel": 0,
+    "bias": 1,
+    "gamma": 0,
+    "beta": 1,
+    "moving_mean": 2,
+    "moving_variance": 3,
+}
+
+
+def _build_outer_name_map(config: dict) -> dict[str, str]:
+    """Map config layer names → HDF5 layer keys.
+
+    The .keras bundle may store HDF5 layer keys using Keras auto-generated
+    names (e.g. ``conv2d``, ``mb_conv_block_1``) while config.json uses
+    user-specified names (e.g. ``stem_conv``, ``block_1a``).  This function
+    re-derives the auto-name by counting class occurrences in config order.
     """
-    import h5py
-    results = []
-
-    def _dfs(node):
-        if isinstance(node, h5py.Dataset):
-            results.append(np.array(node))
-            return
-        # Sort keys numerically where possible so "2" < "10"
-        def _key(k):
-            try:
-                return (0, int(k))
-            except ValueError:
-                return (1, k)
-        for k in sorted(node.keys(), key=_key):
-            _dfs(node[k])
-
-    _dfs(h5_group)
-    return results
+    class_counter: dict[str, int] = {}
+    outer_map: dict[str, str] = {}
+    for layer_cfg in config["config"]["layers"]:
+        class_name = layer_cfg["class_name"]
+        layer_name = layer_cfg["name"]
+        base = _CLASS_TO_H5_BASE.get(class_name, class_name.lower())
+        count = class_counter.get(base, 0)
+        h5_key = base if count == 0 else f"{base}_{count}"
+        outer_map[layer_name] = h5_key
+        class_counter[base] = count + 1
+    return outer_map
 
 
 # ---------------------------------------------------------------------------
@@ -403,18 +471,14 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
         logger.warning("tf.keras.models.load_model failed for skin: %s", e3)
 
     # -----------------------------------------------------------------------
-    # Strategy 4 — manual unzip + h5py index-based weight assignment
+    # Strategy 4 — manual unzip + h5py path-based weight assignment
     #
-    # Why this works when skip_mismatch doesn't:
-    #   Keras 3 saves weights in model.weights.h5 using a numbered DFS tree
-    #   (groups "0"/"1"/.../"vars"/"0" etc.), NOT by layer name.  When Keras
-    #   calls load_weights() it tries to match variable *names*; because the
-    #   running environment has a different Keras version the names differ and
-    #   394 BN weights get skipped entirely -> near-uniform softmax output.
-    #
-    #   We bypass name matching completely: collect all leaf datasets from the
-    #   HDF5 file in the same DFS order Keras uses, then zip-assign them to
-    #   model.weights.  Shape mismatches are logged and skipped safely.
+    # The .keras bundle contains config.json (architecture) and
+    # model.weights.h5 (weights keyed by auto-generated layer names).
+    # The config uses user-specified names (e.g. "block_1a") while the
+    # HDF5 uses Keras auto-names (e.g. "mb_conv_block").  We bridge
+    # the two by building an explicit outer-name mapping and then
+    # translating each model variable path to its HDF5 dataset path.
     # -----------------------------------------------------------------------
     import zipfile, tempfile, os, json, h5py
     try:
@@ -444,48 +508,132 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
             )
             # Force all layers to create their variables
             model.build((None, 512, 512, 3))
-            # Run one dummy forward pass so sub-layers inside MBConvBlock
-            # (like the inline GlobalAveragePooling2D) also build
+            # Run one dummy forward pass so all sub-layers build
             dummy = np.zeros((1, 512, 512, 3), dtype=np.float32)
             try:
                 model(dummy, training=False)
             except Exception:
                 pass
 
-            if weights_path:
-                with h5py.File(weights_path, "r") as hf:
-                    saved_weights = _collect_h5_weights(hf)
-
-                model_weights = model.weights
-                assigned = 0
-                skipped = 0
-                for i, (var, arr) in enumerate(zip(model_weights, saved_weights)):
-                    try:
-                        var.assign(arr.astype(var.dtype.as_numpy_dtype))
-                        assigned += 1
-                    except Exception as assign_err:
-                        logger.debug(
-                            "Weight[%d] shape mismatch (var=%s saved=%s): %s",
-                            i, var.shape, arr.shape, assign_err,
-                        )
-                        skipped += 1
-
-                logger.info(
-                    "Skin model loaded via h5py index-based assignment: "
-                    "%d assigned, %d skipped.",
-                    assigned, skipped,
-                )
-                if skipped > 0:
-                    logger.warning(
-                        "%d weights could not be assigned (shape mismatch). "
-                        "Predictions may be partially degraded.",
-                        skipped,
-                    )
-            else:
+            if not weights_path:
                 logger.warning(
                     "Skin model architecture rebuilt but no weights file found "
                     "— predictions will be random."
                 )
+                return model
+
+            # Build flat dict of all HDF5 layer datasets
+            h5_data: dict[str, np.ndarray] = {}
+            with h5py.File(weights_path, "r") as hf:
+                def _visit(name, obj):
+                    if isinstance(obj, h5py.Dataset) and name.startswith("layers/"):
+                        h5_data[name] = np.array(obj)
+                hf.visititems(_visit)
+
+            # Build outer-name mapping (config name → HDF5 key)
+            outer_map = _build_outer_name_map(config_data)
+
+            # Debug: log first 5 H5 keys and first 5 model var paths
+            h5_keys_sample = sorted(h5_data.keys())[:5]
+            var_paths_sample = [v.path for v in model.weights[:5]]
+            logger.info(
+                "H5 keys sample: %s | var paths sample: %s",
+                h5_keys_sample, var_paths_sample,
+            )
+
+            # Assign weights by translating each model var path → HDF5 path
+            assigned = 0
+            skipped = 0
+            for var in model.weights:
+                parts = var.path.split("/")
+                outer_name = parts[0]
+                var_name = parts[-1]
+                h5_outer = outer_map.get(outer_name)
+                if h5_outer is None:
+                    logger.debug("No outer mapping for %s", var.path)
+                    skipped += 1
+                    continue
+
+                var_idx = _VAR_NAME_TO_INDEX.get(var_name, 0)
+
+                if len(parts) == 2:
+                    # Simple layer: outer/var_name
+                    h5_path = f"layers/{h5_outer}/vars/{var_idx}"
+                elif len(parts) == 3:
+                    # Sub-layer: outer/inner/var_name
+                    h5_path = f"layers/{h5_outer}/{parts[1]}/vars/{var_idx}"
+                elif len(parts) == 4:
+                    # Nested sub-layer: outer/inner/sub_inner/var_name
+                    h5_path = f"layers/{h5_outer}/{parts[1]}/{parts[2]}/vars/{var_idx}"
+                else:
+                    logger.debug("Unexpected path depth for %s", var.path)
+                    skipped += 1
+                    continue
+
+                arr = h5_data.get(h5_path)
+                if arr is not None and arr.shape == tuple(var.shape):
+                    target_dtype = (
+                        var.dtype.as_numpy_dtype
+                        if hasattr(var.dtype, "as_numpy_dtype")
+                        else np.float32
+                    )
+                    var.assign(arr.astype(target_dtype))
+                    assigned += 1
+                else:
+                    if arr is not None:
+                        logger.debug(
+                            "Shape mismatch for %s: model=%s h5=%s (h5_path=%s)",
+                            var.path, var.shape, arr.shape, h5_path,
+                        )
+                    else:
+                        logger.debug(
+                            "H5 path not found for %s → %s", var.path, h5_path,
+                        )
+                    skipped += 1
+
+            logger.info(
+                "Skin model loaded via h5py path-based assignment: "
+                "%d assigned, %d skipped.",
+                assigned, skipped,
+            )
+            if skipped > 0:
+                logger.warning(
+                    "%d weights could not be assigned. "
+                    "Predictions may be partially degraded.",
+                    skipped,
+                )
+
+            # ---- Self-test at load time ----
+            # Min confidence for any single class on the expected test image.
+            # A correctly-loaded 8-class model should exceed random chance
+            # (1/8 = 12.5%) by a wide margin; 35% is a conservative floor.
+            _SELFTEST_MIN_CONFIDENCE = 0.35
+
+            test_image_path = os.environ.get("SKIN_TEST_IMAGE", "")
+            if test_image_path and os.path.exists(test_image_path):
+                try:
+                    with open(test_image_path, "rb") as f:
+                        test_bytes = f.read()
+                    test_input = _preprocess_skin(test_bytes)
+                    test_raw = model.predict(test_input, verbose=0)
+                    test_probs = test_raw[0].tolist()
+                    max_conf = max(test_probs)
+                    max_class = test_probs.index(max_conf)
+                    logger.info(
+                        "Skin model self-test: max_confidence=%.4f class_index=%d",
+                        max_conf, max_class,
+                    )
+                    if max_conf < _SELFTEST_MIN_CONFIDENCE:
+                        logger.error(
+                            "SKIN MODEL WEIGHT LOADING FAILURE: max confidence "
+                            "%.4f < %.2f. Weights are not loaded correctly. "
+                            "All predictions will be unreliable.",
+                            max_conf, _SELFTEST_MIN_CONFIDENCE,
+                        )
+                except Exception as selftest_err:
+                    logger.warning(
+                        "Skin model self-test failed: %s", selftest_err
+                    )
 
             return model
 
