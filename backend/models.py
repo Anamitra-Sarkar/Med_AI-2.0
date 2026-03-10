@@ -14,20 +14,24 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Custom Keras layers
-# Must be registered BEFORE any model is loaded.
-# We register twice:
-#   1. package="custom"  -> key "custom>MBConvBlock" (standard)
-#   2. package=""        -> key "MBConvBlock"         (what the .keras bundle stores)
-# The .keras file was saved with 'registered_name': 'MBConvBlock' and
-# 'module': None, so Keras looks up the bare name first. Without the
-# second registration the lookup fails even though the class exists.
+# Registered BEFORE any model is loaded.
+# Dual registration:
+#   package="custom" -> key "custom>MBConvBlock"  (Keras standard)
+#   package=""       -> key "MBConvBlock"          (what .keras bundle stores)
 # ---------------------------------------------------------------------------
 import keras
 
 
 @keras.saving.register_keras_serializable(package="custom")
 class MBConvBlock(keras.layers.Layer):
-    """Mobile Inverted Bottleneck Conv block with optional Squeeze-and-Excitation."""
+    """Mobile Inverted Bottleneck Conv block with Squeeze-and-Excitation.
+
+    mixed_bfloat16 dtype fix: the model was trained with
+    keras.mixed_precision.Policy('mixed_bfloat16'), which means
+    BatchNormalization outputs bfloat16 while the original `inputs`
+    tensor is float32. We cast `inputs` to match `x` before the residual
+    add so the dtypes always agree regardless of the active policy.
+    """
 
     def __init__(
         self,
@@ -91,6 +95,7 @@ class MBConvBlock(keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, inputs, training=None):
+        import tensorflow as tf
         x = inputs
 
         if self.expand_ratio != 1:
@@ -112,7 +117,9 @@ class MBConvBlock(keras.layers.Layer):
         if self._use_residual:
             if self._drop is not None:
                 x = self._drop(x, training=training)
-            x = x + inputs
+            # Cast shortcut to match x dtype (handles mixed_bfloat16 training)
+            shortcut = tf.cast(inputs, x.dtype)
+            x = x + shortcut
 
         return x
 
@@ -132,15 +139,35 @@ class MBConvBlock(keras.layers.Layer):
         return base
 
 
-# Second registration with empty package so bare 'MBConvBlock' key resolves.
-# This matches the 'registered_name': 'MBConvBlock' value stored in the bundle.
+# Second registration: bare 'MBConvBlock' key (what the .keras bundle stores)
 try:
     keras.saving.register_keras_serializable(package="")(MBConvBlock)
 except Exception:
-    pass  # Already registered is fine
+    pass
 
-# Build the explicit custom_objects dict used in every load_model call.
 _SKIN_CUSTOM_OBJECTS: dict[str, Any] = {"MBConvBlock": MBConvBlock}
+
+
+# ---------------------------------------------------------------------------
+# TFSMLayer shim
+# Wraps keras.layers.TFSMLayer so it exposes a .predict() interface.
+# Used as Strategy 2 when the HF repo stores a TF SavedModel (not .keras).
+# ---------------------------------------------------------------------------
+
+class _TFSMShim:
+    """Thin wrapper around TFSMLayer that mimics model.predict()."""
+
+    def __init__(self, layer: Any):
+        self._layer = layer
+
+    def predict(self, x, verbose=0):
+        import tensorflow as tf
+        tensor = tf.constant(x, dtype=tf.float32)
+        out = self._layer(tensor, training=False)
+        # TFSMLayer returns a dict or a tensor
+        if isinstance(out, dict):
+            out = list(out.values())[0]
+        return out.numpy()
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +208,6 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "filename": "model.keras",
         "framework": "keras3",
         "input_size": (512, 512),
-        # Exact class order from the HuggingFace README (CLASS_NAMES list)
         "classes": [
             "Actinic Keratosis",
             "Basal Cell Carcinoma",
@@ -211,7 +237,6 @@ _load_locks: dict[str, threading.Lock] = {k: threading.Lock() for k in MODEL_REG
 # ---------------------------------------------------------------------------
 
 def _preprocess_image_tf(image_bytes: bytes, target_size: tuple[int, int]) -> np.ndarray:
-    """Generic PIL-based preprocessing — returns (1, H, W, 3) float32 in [0,1]."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize(target_size, Image.LANCZOS)
     arr = np.array(img, dtype=np.float32) / 255.0
@@ -219,7 +244,7 @@ def _preprocess_image_tf(image_bytes: bytes, target_size: tuple[int, int]) -> np
 
 
 def _preprocess_dr(image_bytes: bytes) -> np.ndarray:
-    """Exact IDRiD training pipeline replication (cv2 INTER_LINEAR via PIL BILINEAR)."""
+    """Exact IDRiD training pipeline (cv2 INTER_LINEAR via PIL BILINEAR)."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize((384, 384), Image.BILINEAR)
     arr = np.array(img, dtype=np.float32) / 255.0
@@ -227,28 +252,16 @@ def _preprocess_dr(image_bytes: bytes) -> np.ndarray:
 
 
 def _preprocess_skin(image_bytes: bytes) -> np.ndarray:
-    """Skin model preprocessing matching the HuggingFace README exactly.
-
-    README pipeline:
-        img = Image.open(image_path).convert('RGB')
-        img = img.resize((512, 512))
-        img_array = np.array(img)
-        img_array = np.expand_dims(img_array, axis=0)
-        img_array = tf.cast(img_array, tf.float32) / 255.0
-
-    PIL default resize is BICUBIC (Pillow >= 2.7). We match it exactly.
-    """
+    """Matches HuggingFace README: PIL default (BICUBIC) resize, /255.0."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    img = img.resize((512, 512))  # PIL default = BICUBIC, same as README
+    img = img.resize((512, 512))
     arr = np.array(img, dtype=np.float32) / 255.0
     return np.expand_dims(arr, axis=0)
 
 
 def _preprocess_image_torch(image_bytes: bytes, target_size: tuple[int, int]):
-    """Return a torch tensor (1, 3, H, W) with ImageNet normalisation."""
     import torch
     from torchvision import transforms
-
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     transform = transforms.Compose([
         transforms.Resize(target_size),
@@ -261,7 +274,7 @@ def _preprocess_image_torch(image_bytes: bytes, target_size: tuple[int, int]):
 
 
 # ---------------------------------------------------------------------------
-# Cardiac CNN architecture (PyTorch — weights-only .pt)
+# Cardiac CNN (PyTorch weights-only)
 # ---------------------------------------------------------------------------
 
 def _build_cardiac_model(num_classes: int = 2):
@@ -289,7 +302,7 @@ def _build_cardiac_model(num_classes: int = 2):
 
 
 # ---------------------------------------------------------------------------
-# Model loading (lazy, thread-safe)
+# Model loading
 # ---------------------------------------------------------------------------
 
 def _download(repo_id: str, filename: str) -> str:
@@ -298,43 +311,58 @@ def _download(repo_id: str, filename: str) -> str:
 
 
 def _load_skin_model(repo_id: str, filename: str) -> Any:
-    """Load the skin .keras model with multiple fallback strategies.
+    """Three-strategy loader for the skin .keras model.
 
-    Strategy 1: keras.saving.load_model with explicit custom_objects dict.
-                This bypasses the registry lookup entirely.
-    Strategy 2: from_pretrained_keras (as shown in the HuggingFace README)
-                which handles custom_objects natively.
-    Strategy 3: tf.keras.models.load_model with custom_objects (TF compat path).
+    Strategy 1: keras.saving.load_model with explicit custom_objects.
+                Bypasses registry. Works if the file is a valid .keras v3
+                bundle AND MBConvBlock.call() handles the bfloat16 cast.
+
+    Strategy 2: keras.layers.TFSMLayer wrapping the HF SavedModel snapshot.
+                Used when the repo actually stores a TF SavedModel directory
+                rather than (or in addition to) model.keras. The TFSMLayer
+                calls the 'serving_default' endpoint directly, bypassing
+                custom-layer deserialization entirely. Wrapped in _TFSMShim
+                to expose a .predict() API.
+
+    Strategy 3: tf.keras.models.load_model with custom_objects.
+                Legacy TF2 compat path for H5 / SavedModel fallback.
     """
     path = _download(repo_id, filename)
 
-    # Strategy 1 — explicit custom_objects, no registry lookup needed
+    # Strategy 1 — explicit custom_objects, bfloat16 cast fix in call()
     try:
-        return keras.saving.load_model(
+        model = keras.saving.load_model(
             path,
             custom_objects=_SKIN_CUSTOM_OBJECTS,
             compile=False,
         )
+        logger.info("Skin model loaded via keras.saving.load_model.")
+        return model
     except Exception as e1:
         logger.warning("keras.saving.load_model failed for skin: %s", e1)
 
-    # Strategy 2 — from_pretrained_keras (as in the README)
+    # Strategy 2 — TFSMLayer on the HF snapshot directory (inference-only)
     try:
-        from huggingface_hub import from_pretrained_keras
-        return from_pretrained_keras(
-            repo_id,
-            custom_objects=_SKIN_CUSTOM_OBJECTS,
+        from huggingface_hub import snapshot_download
+        snapshot_dir = snapshot_download(repo_id=repo_id)
+        layer = keras.layers.TFSMLayer(
+            snapshot_dir,
+            call_endpoint="serving_default",
         )
+        logger.info("Skin model loaded via TFSMLayer (SavedModel snapshot).")
+        return _TFSMShim(layer)
     except Exception as e2:
-        logger.warning("from_pretrained_keras failed for skin: %s", e2)
+        logger.warning("TFSMLayer failed for skin: %s", e2)
 
-    # Strategy 3 — TF compat path
+    # Strategy 3 — tf.keras legacy loader
     import tensorflow as tf
-    return tf.keras.models.load_model(
+    model = tf.keras.models.load_model(
         path,
         custom_objects=_SKIN_CUSTOM_OBJECTS,
         compile=False,
     )
+    logger.info("Skin model loaded via tf.keras.models.load_model.")
+    return model
 
 
 def _load_model(name: str) -> Any:
@@ -353,7 +381,6 @@ def _load_model(name: str) -> Any:
         model.load_weights(weights_path)
         return model
 
-    # Skin model — dedicated loader with custom_objects fallback chain
     if fw == "keras3":
         return _load_skin_model(cfg["repo_id"], cfg["filename"])
 
@@ -391,7 +418,6 @@ def _load_model(name: str) -> Any:
 
 
 def get_model(name: str) -> Any:
-    """Return a loaded model (lazy, cached, thread-safe)."""
     if name not in MODEL_REGISTRY:
         raise KeyError(f"Unknown model: {name}")
     if name not in _loaded_models:
@@ -418,7 +444,6 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
         if name == "diabetic_retinopathy":
             inp = _preprocess_dr(image_bytes)
         elif name == "skin":
-            # Use README-matching preprocessing (PIL default resize, /255.0)
             inp = _preprocess_skin(image_bytes)
         else:
             inp = _preprocess_image_tf(image_bytes, size)
@@ -443,7 +468,6 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
 
     # PyTorch path
     import torch
-
     inp = _preprocess_image_torch(image_bytes, size)
     with torch.no_grad():
         logits = model(inp)
