@@ -1,13 +1,17 @@
 {
-  "name": "Valeon",
+  "id": "/",
+  "name": "Valeon – Medical AI",
   "short_name": "Valeon",
-  "description": "AI-powered medical assistant",
+  "description": "AI-powered medical diagnostic assistant — cataract screening, retinopathy, kidney, skin & cardiac analysis.",
   "theme_color": "#0d9488",
   "background_color": "#0f172a",
   "display": "standalone",
-  "start_url": "/",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "start_url": "/home",
   "scope": "/",
   "orientation": "portrait-primary",
+  "categories": ["medical", "health", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-72x72.png",
