@@ -29,6 +29,15 @@ const tabs: { key: Tab; label: string; emoji: string }[] = [
   { key: "pharmacy", label: "Pharmacies", emoji: "💊" },
 ];
 
+/** IP-based fallback — no API key required, returns approx coords */
+async function getLocationByIP(): Promise<{ lat: number; lon: number }> {
+  const res = await fetch("https://ipapi.co/json/");
+  if (!res.ok) throw new Error("IP geolocation failed");
+  const data = await res.json();
+  if (!data.latitude || !data.longitude) throw new Error("No coords in IP response");
+  return { lat: data.latitude, lon: data.longitude };
+}
+
 export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
   const [step, setStep] = useState<
     "ask" | "loading" | "results" | "denied" | "error"
@@ -54,13 +63,24 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
     onClose();
   }
 
+  async function fetchPlacesFor(lat: number, lon: number) {
+    setUserCoords({ lat, lon });
+    const data = await getNearbyPlaces(lat, lon, 3000);
+    setPlaces(data.results);
+    setStep("results");
+  }
+
   function handleAllow() {
     setStep("loading");
 
     if (!navigator.geolocation) {
-      toast.error("Geolocation is not supported by your browser");
-      setStep("error");
-      setErrorMsg("Geolocation is not supported by your browser.");
+      // No geolocation API at all — go straight to IP fallback
+      getLocationByIP()
+        .then(({ lat, lon }) => fetchPlacesFor(lat, lon))
+        .catch(() => {
+          setStep("error");
+          setErrorMsg("Could not determine your location. Please try again.");
+        });
       return;
     }
 
@@ -68,10 +88,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          setUserCoords({ lat: latitude, lon: longitude });
-          const data = await getNearbyPlaces(latitude, longitude, 3000);
-          setPlaces(data.results);
-          setStep("results");
+          await fetchPlacesFor(latitude, longitude);
         } catch {
           toast.error("Failed to fetch nearby places");
           setStep("error");
@@ -80,18 +97,29 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
           );
         }
       },
-      (err) => {
+      async (err) => {
         if (err.code === err.PERMISSION_DENIED) {
           setStep("denied");
-        } else if (err.code === err.TIMEOUT) {
-          setStep("error");
-          setErrorMsg("Location request timed out. Please try again.");
         } else {
-          setStep("error");
-          setErrorMsg("Location unavailable. Please check your device settings.");
+          // TIMEOUT or POSITION_UNAVAILABLE — try IP-based fallback silently
+          try {
+            const { lat, lon } = await getLocationByIP();
+            toast("Using approximate location based on your IP.", {
+              icon: "📍",
+              duration: 4000,
+            });
+            await fetchPlacesFor(lat, lon);
+          } catch {
+            setStep("error");
+            setErrorMsg(
+              "Location unavailable. Please check your browser or device settings."
+            );
+          }
         }
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      // enableHighAccuracy: false — use fast network/IP-based location.
+      // true forces GPS which desktop browsers don't have, causing TIMEOUT.
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 60000 }
     );
   }
 

@@ -478,7 +478,11 @@ async def nearby_care(req: NearbyCareRequest):
         f"out body;"
     )
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    # Use split connect/read timeouts: fast fail on connection, generous read
+    # window for Overpass API which can be slow on busy public instances.
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=5.0, read=28.0, write=5.0, pool=5.0)
+    ) as client:
         try:
             resp = await client.post(OVERPASS_URL, data={"data": query})
         except httpx.TimeoutException:
