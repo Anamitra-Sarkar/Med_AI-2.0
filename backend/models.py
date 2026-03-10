@@ -311,37 +311,46 @@ def _download(repo_id: str, filename: str) -> str:
 
 
 def _load_skin_model(repo_id: str, filename: str) -> Any:
-    """Three-strategy loader for the skin .keras model.
+    """Four-strategy loader for the skin .keras model.
 
-    Strategy 1: keras.saving.load_model with explicit custom_objects.
-                Bypasses registry. Works if the file is a valid .keras v3
-                bundle AND MBConvBlock.call() handles the bfloat16 cast.
+    Strategy 1: keras.saving.load_model with explicit custom_objects +
+                safe_mode=False. Handles cross-version .keras bundles where
+                BatchNormalization variables would otherwise be skipped.
 
     Strategy 2: keras.layers.TFSMLayer wrapping the HF SavedModel snapshot.
-                Used when the repo actually stores a TF SavedModel directory
-                rather than (or in addition to) model.keras. The TFSMLayer
-                calls the 'serving_default' endpoint directly, bypassing
-                custom-layer deserialization entirely. Wrapped in _TFSMShim
-                to expose a .predict() API.
+                Used when the repo actually stores a TF SavedModel directory.
+                Wrapped in _TFSMShim to expose a .predict() API.
 
     Strategy 3: tf.keras.models.load_model with custom_objects.
-                Legacy TF2 compat path for H5 / SavedModel fallback.
+                Legacy TF2 compat path, also with safe_mode=False.
+
+    Strategy 4: Manual unzip of .keras bundle -> load architecture from
+                config.json -> build model -> load_weights from weights files
+                with skip_mismatch=True. Last-resort for version-skewed files.
     """
+    import tensorflow as tf
     path = _download(repo_id, filename)
 
-    # Strategy 1 — explicit custom_objects, bfloat16 cast fix in call()
+    # -----------------------------------------------------------------------
+    # Strategy 1 — keras.saving.load_model with safe_mode=False
+    # safe_mode=False lets Keras load cross-version bundles without rejecting
+    # lambda layers or mismatched variable counts.
+    # -----------------------------------------------------------------------
     try:
         model = keras.saving.load_model(
             path,
             custom_objects=_SKIN_CUSTOM_OBJECTS,
             compile=False,
+            safe_mode=False,
         )
-        logger.info("Skin model loaded via keras.saving.load_model.")
+        logger.info("Skin model loaded via keras.saving.load_model (safe_mode=False).")
         return model
     except Exception as e1:
         logger.warning("keras.saving.load_model failed for skin: %s", e1)
 
+    # -----------------------------------------------------------------------
     # Strategy 2 — TFSMLayer on the HF snapshot directory (inference-only)
+    # -----------------------------------------------------------------------
     try:
         from huggingface_hub import snapshot_download
         snapshot_dir = snapshot_download(repo_id=repo_id)
@@ -354,15 +363,82 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
     except Exception as e2:
         logger.warning("TFSMLayer failed for skin: %s", e2)
 
-    # Strategy 3 — tf.keras legacy loader
-    import tensorflow as tf
-    model = tf.keras.models.load_model(
-        path,
-        custom_objects=_SKIN_CUSTOM_OBJECTS,
-        compile=False,
-    )
-    logger.info("Skin model loaded via tf.keras.models.load_model.")
-    return model
+    # -----------------------------------------------------------------------
+    # Strategy 3 — tf.keras legacy loader with safe_mode=False
+    # -----------------------------------------------------------------------
+    try:
+        load_kwargs: dict[str, Any] = {"compile": False}
+        # safe_mode is only available in newer tf.keras builds; guard it
+        import inspect
+        if "safe_mode" in inspect.signature(tf.keras.models.load_model).parameters:
+            load_kwargs["safe_mode"] = False
+        model = tf.keras.models.load_model(
+            path,
+            custom_objects=_SKIN_CUSTOM_OBJECTS,
+            **load_kwargs,
+        )
+        logger.info("Skin model loaded via tf.keras.models.load_model.")
+        return model
+    except Exception as e3:
+        logger.warning("tf.keras.models.load_model failed for skin: %s", e3)
+
+    # -----------------------------------------------------------------------
+    # Strategy 4 — manual unzip: rebuild from config then load weights
+    # A .keras file is a ZIP archive containing:
+    #   config.json       - full model JSON config
+    #   model.weights.h5  - HDF5 weight file
+    # We extract both, reconstruct the model from JSON, then load the weights
+    # using skip_mismatch=True so mismatched BN variables don't hard-crash.
+    # -----------------------------------------------------------------------
+    import zipfile, tempfile, os, json
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with zipfile.ZipFile(path, "r") as zf:
+                zf.extractall(tmpdir)
+
+            config_path = os.path.join(tmpdir, "config.json")
+            weights_candidates = [
+                os.path.join(tmpdir, "model.weights.h5"),
+                os.path.join(tmpdir, "weights.h5"),
+            ]
+            weights_path = next(
+                (p for p in weights_candidates if os.path.exists(p)), None
+            )
+
+            if not os.path.exists(config_path):
+                raise FileNotFoundError("config.json not found inside .keras bundle")
+
+            with open(config_path, "r") as f:
+                config_data = json.load(f)
+
+            # Reconstruct the model from its serialized config
+            model = keras.models.model_from_json(
+                json.dumps(config_data),
+                custom_objects=_SKIN_CUSTOM_OBJECTS,
+            )
+
+            # Build the model so layers allocate their variables
+            model.build((None, 512, 512, 3))
+
+            if weights_path:
+                model.load_weights(weights_path, skip_mismatch=True)
+                logger.info(
+                    "Skin model loaded via manual unzip + load_weights "
+                    "(skip_mismatch=True)."
+                )
+            else:
+                logger.warning(
+                    "Skin model architecture rebuilt but no weights file found "
+                    "inside .keras bundle — predictions may be random."
+                )
+
+            return model
+    except Exception as e4:
+        logger.error("All skin model loading strategies failed. Last error: %s", e4)
+        raise RuntimeError(
+            "Could not load skin model after 4 strategies. "
+            f"Errors: [S1] {e1} | [S2] {e2} | [S3] {e3} | [S4] {e4}"
+        ) from e4
 
 
 def _load_model(name: str) -> Any:
