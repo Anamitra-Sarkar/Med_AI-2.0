@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { motion, useInView, type AnimationProps } from "framer-motion";
+import { motion, useInView, type MotionProps } from "framer-motion";
 import {
   FiMessageCircle,
   FiEye,
@@ -115,7 +115,7 @@ function Orb({
 }: {
   className: string;
   duration: number;
-  animate: AnimationProps["animate"];
+  animate: MotionProps["animate"];
 }) {
   return (
     <motion.div
@@ -286,7 +286,6 @@ export default function Home() {
       {/* ── BELOW-FOLD WRAPPER — shared ambient background ── */}
       <div className="section-bg">
 
-        {/* ambient orbs shared across all below-fold sections */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <Orb className="-left-48 top-[10%] h-[600px] w-[600px] bg-teal-500/5" duration={25} animate={{ x: [0,80,0], y: [0,60,0] }} />
           <Orb className="-right-48 top-[35%] h-[500px] w-[500px] bg-blue-600/5" duration={30} animate={{ x: [0,-60,0], y: [0,80,0] }} />
