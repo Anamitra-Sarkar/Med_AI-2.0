@@ -13,7 +13,14 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Custom Keras layers — must be registered BEFORE any model is loaded
+# Custom Keras layers
+# Must be registered BEFORE any model is loaded.
+# We register twice:
+#   1. package="custom"  -> key "custom>MBConvBlock" (standard)
+#   2. package=""        -> key "MBConvBlock"         (what the .keras bundle stores)
+# The .keras file was saved with 'registered_name': 'MBConvBlock' and
+# 'module': None, so Keras looks up the bare name first. Without the
+# second registration the lookup fails even though the class exists.
 # ---------------------------------------------------------------------------
 import keras
 
@@ -87,9 +94,13 @@ class MBConvBlock(keras.layers.Layer):
         x = inputs
 
         if self.expand_ratio != 1:
-            x = keras.activations.swish(self._expand_bn(self._expand_conv(x), training=training))
+            x = keras.activations.swish(
+                self._expand_bn(self._expand_conv(x), training=training)
+            )
 
-        x = keras.activations.swish(self._dw_bn(self._dw_conv(x), training=training))
+        x = keras.activations.swish(
+            self._dw_bn(self._dw_conv(x), training=training)
+        )
 
         if self.se_ratio > 0:
             se = keras.layers.GlobalAveragePooling2D(keepdims=True)(x)
@@ -121,6 +132,17 @@ class MBConvBlock(keras.layers.Layer):
         return base
 
 
+# Second registration with empty package so bare 'MBConvBlock' key resolves.
+# This matches the 'registered_name': 'MBConvBlock' value stored in the bundle.
+try:
+    keras.saving.register_keras_serializable(package="")(MBConvBlock)
+except Exception:
+    pass  # Already registered is fine
+
+# Build the explicit custom_objects dict used in every load_model call.
+_SKIN_CUSTOM_OBJECTS: dict[str, Any] = {"MBConvBlock": MBConvBlock}
+
+
 # ---------------------------------------------------------------------------
 # Model registry
 # ---------------------------------------------------------------------------
@@ -139,10 +161,6 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "filename": "best_model.h5",
         "framework": "tf",
         "input_size": (384, 384),
-        # IDRiD dataset standard 5-class grading (Grade 0–4)
-        # Order MUST match the training label encoding:
-        #   0 → No DR  |  1 → Mild  |  2 → Moderate
-        #   3 → Severe  |  4 → Proliferative DR
         "classes": [
             "Grade 0 - No DR",
             "Grade 1 - Mild DR",
@@ -163,6 +181,7 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "filename": "model.keras",
         "framework": "keras3",
         "input_size": (512, 512),
+        # Exact class order from the HuggingFace README (CLASS_NAMES list)
         "classes": [
             "Actinic Keratosis",
             "Basal Cell Carcinoma",
@@ -200,26 +219,29 @@ def _preprocess_image_tf(image_bytes: bytes, target_size: tuple[int, int]) -> np
 
 
 def _preprocess_dr(image_bytes: bytes) -> np.ndarray:
-    """Preprocessing that EXACTLY replicates the IDRiD training pipeline.
-
-    The model (Arko007/diabetic-retinopathy-v1) was trained with:
-        img = cv2.imread(path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img = cv2.resize(img, (384, 384))          # INTER_LINEAR (default)
-        img = img.astype(np.float32) / 255.0
-
-    Using PIL LANCZOS instead shifts pixel value distributions enough to
-    move the model's confidence away from the correct grade, causing it to
-    falsely predict Grade 0 (No DR) on images that clearly show DR lesions.
-    We replicate cv2 behaviour here using only numpy + PIL to avoid adding
-    the opencv-python dependency.
-    """
-    # Decode via PIL (always RGB)
+    """Exact IDRiD training pipeline replication (cv2 INTER_LINEAR via PIL BILINEAR)."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    # Replicate cv2.resize INTER_LINEAR via PIL BILINEAR — same algorithm
     img = img.resize((384, 384), Image.BILINEAR)
     arr = np.array(img, dtype=np.float32) / 255.0
-    return np.expand_dims(arr, axis=0)   # (1, 384, 384, 3)
+    return np.expand_dims(arr, axis=0)
+
+
+def _preprocess_skin(image_bytes: bytes) -> np.ndarray:
+    """Skin model preprocessing matching the HuggingFace README exactly.
+
+    README pipeline:
+        img = Image.open(image_path).convert('RGB')
+        img = img.resize((512, 512))
+        img_array = np.array(img)
+        img_array = np.expand_dims(img_array, axis=0)
+        img_array = tf.cast(img_array, tf.float32) / 255.0
+
+    PIL default resize is BICUBIC (Pillow >= 2.7). We match it exactly.
+    """
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    img = img.resize((512, 512))  # PIL default = BICUBIC, same as README
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return np.expand_dims(arr, axis=0)
 
 
 def _preprocess_image_torch(image_bytes: bytes, target_size: tuple[int, int]):
@@ -275,6 +297,46 @@ def _download(repo_id: str, filename: str) -> str:
     return hf_hub_download(repo_id=repo_id, filename=filename)
 
 
+def _load_skin_model(repo_id: str, filename: str) -> Any:
+    """Load the skin .keras model with multiple fallback strategies.
+
+    Strategy 1: keras.saving.load_model with explicit custom_objects dict.
+                This bypasses the registry lookup entirely.
+    Strategy 2: from_pretrained_keras (as shown in the HuggingFace README)
+                which handles custom_objects natively.
+    Strategy 3: tf.keras.models.load_model with custom_objects (TF compat path).
+    """
+    path = _download(repo_id, filename)
+
+    # Strategy 1 — explicit custom_objects, no registry lookup needed
+    try:
+        return keras.saving.load_model(
+            path,
+            custom_objects=_SKIN_CUSTOM_OBJECTS,
+            compile=False,
+        )
+    except Exception as e1:
+        logger.warning("keras.saving.load_model failed for skin: %s", e1)
+
+    # Strategy 2 — from_pretrained_keras (as in the README)
+    try:
+        from huggingface_hub import from_pretrained_keras
+        return from_pretrained_keras(
+            repo_id,
+            custom_objects=_SKIN_CUSTOM_OBJECTS,
+        )
+    except Exception as e2:
+        logger.warning("from_pretrained_keras failed for skin: %s", e2)
+
+    # Strategy 3 — TF compat path
+    import tensorflow as tf
+    return tf.keras.models.load_model(
+        path,
+        custom_objects=_SKIN_CUSTOM_OBJECTS,
+        compile=False,
+    )
+
+
 def _load_model(name: str) -> Any:
     cfg = MODEL_REGISTRY[name]
     fw = cfg["framework"]
@@ -291,9 +353,9 @@ def _load_model(name: str) -> Any:
         model.load_weights(weights_path)
         return model
 
+    # Skin model — dedicated loader with custom_objects fallback chain
     if fw == "keras3":
-        path = _download(cfg["repo_id"], cfg["filename"])
-        return keras.saving.load_model(path, compile=False)
+        return _load_skin_model(cfg["repo_id"], cfg["filename"])
 
     if fw == "tf":
         import tensorflow as tf
@@ -353,10 +415,11 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
     size = cfg["input_size"]
 
     if fw in ("tf", "keras3", "keras_json_weights"):
-        # Diabetic retinopathy uses its own preprocessing pipeline that
-        # exactly replicates the cv2-based IDRiD training script.
         if name == "diabetic_retinopathy":
             inp = _preprocess_dr(image_bytes)
+        elif name == "skin":
+            # Use README-matching preprocessing (PIL default resize, /255.0)
+            inp = _preprocess_skin(image_bytes)
         else:
             inp = _preprocess_image_tf(image_bytes, size)
 
