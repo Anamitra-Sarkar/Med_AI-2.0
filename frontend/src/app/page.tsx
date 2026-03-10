@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { motion, useInView } from "framer-motion";
+import { motion, useInView, type AnimationProps } from "framer-motion";
 import {
   FiMessageCircle,
   FiEye,
@@ -115,7 +115,7 @@ function Orb({
 }: {
   className: string;
   duration: number;
-  animate: object;
+  animate: AnimationProps["animate"];
 }) {
   return (
     <motion.div
@@ -298,7 +298,6 @@ export default function Home() {
         <Section id="about" className="relative mx-auto max-w-4xl px-6 py-28">
           <motion.div variants={cardVariant}
             className="glass-card rounded-3xl p-10 text-center sm:p-14 dark:glass-card">
-            {/* teal top accent bar */}
             <div className="mx-auto mb-8 h-1 w-16 rounded-full bg-gradient-to-r from-teal-400 to-blue-400" />
             <motion.h2 variants={fadeUp} custom={0}
               className="mb-6 text-3xl font-bold sm:text-4xl gradient-text">
@@ -332,7 +331,6 @@ export default function Home() {
                 whileHover={{ y: -8, transition: { duration: 0.25 } }}
                 className="glass-card group cursor-default rounded-2xl p-8 transition-all duration-300"
               >
-                {/* coloured top border per card */}
                 <div className={`mb-5 h-0.5 w-full rounded-full bg-gradient-to-r ${f.color} opacity-60`} />
                 <div className={`mb-5 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${f.color} text-white shadow-md`}>
                   <f.icon size={22} />
@@ -400,7 +398,7 @@ export default function Home() {
           </div>
         </footer>
 
-      </div>{/* end section-bg */}
+      </div>
     </div>
   );
 }
