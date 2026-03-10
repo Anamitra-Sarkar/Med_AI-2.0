@@ -274,8 +274,10 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "repo_id": "Arko007/cardiac-mri-cnn",
         "filename": "best_model_epoch20_auc0.8129.pt",
         "framework": "pytorch_cardiac",
-        "input_size": (224, 224),
-        "classes": ["Normal", "Abnormal"],
+        # Input size matches original app: 896×896
+        "input_size": (896, 896),
+        # Index 0 = Normal, Index 1 = Sick  (matches original model_service.py)
+        "classes": ["Normal", "Sick"],
     },
 }
 
@@ -322,32 +324,43 @@ def _preprocess_image_torch(image_bytes: bytes, target_size: tuple[int, int]):
     return transform(img).unsqueeze(0)
 
 
+def _preprocess_cardiac(image_bytes: bytes, target_size: tuple[int, int]):
+    """Cardiac-specific preprocessing: Grayscale → 3ch, normalize with 0.5/0.5.
+
+    Matches the original ModelService transform exactly:
+      Resize → Grayscale(num_output_channels=3) → ToTensor → Normalize(0.5, 0.5)
+    """
+    import torch
+    from torchvision import transforms
+    img = Image.open(io.BytesIO(image_bytes))
+    # Convert to grayscale first (as the model was trained on grayscale MRI)
+    if img.mode != "L":
+        img = img.convert("L")
+    transform = transforms.Compose([
+        transforms.Resize(target_size),
+        transforms.Grayscale(num_output_channels=3),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
+    return transform(img).unsqueeze(0)
+
+
 # ---------------------------------------------------------------------------
-# Cardiac CNN (PyTorch weights-only)
+# Cardiac model: DenseNet-169 (matches original training architecture)
 # ---------------------------------------------------------------------------
 
 def _build_cardiac_model(num_classes: int = 2):
+    """Build DenseNet-169 with a replaced classifier head.
+
+    The checkpoint was trained with torchvision DenseNet-169 where only
+    the final Linear layer was replaced — identical to the original app's
+    ModelService._load_model().
+    """
     import torch.nn as nn
-
-    class CardiacCNN(nn.Module):
-        def __init__(self, n_classes: int):
-            super().__init__()
-            self.features = nn.Sequential(
-                nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-                nn.Conv2d(32, 64, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-                nn.Conv2d(64, 128, 3, padding=1), nn.ReLU(), nn.MaxPool2d(2),
-                nn.Conv2d(128, 256, 3, padding=1), nn.ReLU(), nn.AdaptiveAvgPool2d(1),
-            )
-            self.classifier = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(256, 128), nn.ReLU(), nn.Dropout(0.5),
-                nn.Linear(128, n_classes),
-            )
-
-        def forward(self, x):
-            return self.classifier(self.features(x))
-
-    return CardiacCNN(num_classes)
+    from torchvision import models
+    model = models.densenet169(weights=None)
+    model.classifier = nn.Linear(model.classifier.in_features, num_classes)
+    return model
 
 
 # ---------------------------------------------------------------------------
@@ -684,13 +697,10 @@ def _load_model(name: str) -> Any:
     if fw == "pytorch_cardiac":
         import torch
         path = _download(cfg["repo_id"], cfg["filename"])
-        state = torch.load(path, map_location="cpu", weights_only=False)
-        if isinstance(state, dict):
-            sd = state.get("model_state_dict", state)
-            model = _build_cardiac_model(len(cfg["classes"]))
-            model.load_state_dict(sd, strict=False)
-        else:
-            model = state
+        checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+        state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+        model = _build_cardiac_model(len(cfg["classes"]))
+        model.load_state_dict(state_dict, strict=False)
         model.eval()
         return model
 
@@ -748,7 +758,13 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
 
     # PyTorch path
     import torch
-    inp = _preprocess_image_torch(image_bytes, size)
+
+    # Use cardiac-specific preprocessing for the cardiac model
+    if name == "cardiac":
+        inp = _preprocess_cardiac(image_bytes, size)
+    else:
+        inp = _preprocess_image_torch(image_bytes, size)
+
     with torch.no_grad():
         logits = model(inp)
         if logits.shape[-1] == 1:
