@@ -13,7 +13,7 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 from groq import Groq
 from pydantic import BaseModel, Field
 from pymongo import MongoClient
@@ -25,22 +25,32 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # App + CORS
 # ---------------------------------------------------------------------------
-app = FastAPI(title="Valeon API", version="1.0.0")
+app = FastAPI(
+    title="Valeon API",
+    version="1.0.0",
+    description="Medical AI diagnostic backend powering the Valeon platform.",
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
-ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "https://localhost:3000",
-]
-
+# Origins: localhost dev, any Vercel deployment, and the HuggingFace Space itself
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"^https?://localhost:3000$|^https://.*\.vercel\.app$",
+    allow_origin_regex=(
+        r"^https?://localhost:3000$"
+        r"|^https://.*\.vercel\.app$"
+        r"|^https://.*\.hf\.space$"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +59,10 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Clients
 # ---------------------------------------------------------------------------
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+_groq_api_key = os.getenv("GROQ_API_KEY")
+if not _groq_api_key:
+    logger.warning("GROQ_API_KEY is not set – chat and summarisation endpoints will fail.")
+groq_client = Groq(api_key=_groq_api_key)
 
 # MongoDB (optional – endpoints degrade gracefully if unavailable)
 _mongo_client: MongoClient | None = None
@@ -63,6 +76,8 @@ if MONGODB_URI:
         logger.info("Connected to MongoDB Atlas.")
     except Exception as exc:
         logger.warning("MongoDB connection failed: %s", exc)
+else:
+    logger.warning("MONGODB_URI is not set – profile endpoints will return 503.")
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -115,7 +130,7 @@ def _build_system_prompt(user_profile: dict | None) -> str:
     profile_ctx = (
         "\n\nPatient profile (use this context to personalise every response — "
         "address the patient by name, factor in their conditions, and tailor advice accordingly):\n"
-        + "\n".join(f"  • {p}" for p in parts)
+        + "\n".join(f"  \u2022 {p}" for p in parts)
     )
     return BASE_SYSTEM_PROMPT + profile_ctx
 
@@ -170,24 +185,35 @@ def summarize_prediction(model_name: str, predictions: dict[str, float]) -> str:
     response = groq_client.chat.completions.create(
         model=SUMMARIZER_MODEL,
         messages=[
-            {"role": "system", "content": "You are a concise medical report summariser. Output plain text only. No thinking tags, no markdown."},
+            {
+                "role": "system",
+                "content": "You are a concise medical report summariser. Output plain text only. No thinking tags, no markdown.",
+            },
             {"role": "user", "content": prompt},
         ],
         temperature=0.3,
         max_completion_tokens=1024,
     )
     raw = response.choices[0].message.content or ""
+    # Strip any residual chain-of-thought blocks that some model versions emit
     cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
     return cleaned
 
 
 # ---------------------------------------------------------------------------
-# Routes – Health
+# Routes – Root & Health
 # ---------------------------------------------------------------------------
 
 
-@app.get("/health")
+@app.get("/", include_in_schema=False)
+async def root():
+    """Redirect bare root requests to the interactive API docs."""
+    return RedirectResponse(url="/docs")
+
+
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
+    """Liveness probe – supports both GET and HEAD (used by HuggingFace Spaces)."""
     return {"status": "ok", "service": "valeon-api"}
 
 
@@ -208,7 +234,6 @@ async def chat(req: ChatRequest):
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty after sanitisation")
 
-    # Build a personalised system prompt using the patient's profile
     system_content = _build_system_prompt(req.user_profile)
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
