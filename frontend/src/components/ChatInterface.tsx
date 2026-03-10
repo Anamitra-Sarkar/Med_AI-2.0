@@ -42,6 +42,8 @@ export default function ChatInterface({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isMounted = useRef(true);
+  // Track whether welcome has already been shown to prevent re-firing
+  const welcomeShownRef = useRef(false);
 
   useEffect(() => {
     isMounted.current = true;
@@ -54,54 +56,55 @@ export default function ChatInterface({
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
-  // Welcome message
-  const setWelcome = useCallback(() => {
-    if (!user) return;
-    const displayName = userProfile?.name || user.displayName || null;
-    setMessages([{
+  // Build the welcome message string
+  const buildWelcome = useCallback((): Message => {
+    const displayName = userProfile?.name || user?.displayName || null;
+    return {
       role: "assistant",
       content: `Hello${
         displayName ? `, ${displayName}` : ""
       }! I'm Valeon, your AI health companion. I can help you with health questions, analyze medical images, and more. How can I assist you today?`,
-    }]);
+    };
   }, [user, userProfile]);
 
-  // Load a previous session when activeSessionId changes
+  // Single authoritative effect: handles both fresh start and session restore.
+  // Runs when activeSessionId changes OR when the user object becomes available.
   useEffect(() => {
-    if (!user || !activeSessionId) {
-      // No session requested — show welcome and create fresh on first send
-      if (!activeSessionId) {
-        setSessionId(null);
-        setWelcome();
-      }
-      return;
-    }
-    (async () => {
-      try {
-        const session = await getChatSession(user.uid, activeSessionId);
-        if (!isMounted.current) return;
-        setSessionId(activeSessionId);
-        const loaded: Message[] = (session.messages ?? []).map((m: ChatMessage) => ({
-          role: m.role,
-          content: m.content,
-        }));
-        // Prepend welcome only if session is empty
-        if (loaded.length === 0) {
-          setWelcome();
-        } else {
-          setMessages(loaded);
-        }
-      } catch {
-        toast.error("Could not load chat session.");
-        setWelcome();
-      }
-    })();
-  }, [activeSessionId, user, setWelcome]);
+    if (!user) return;
 
-  // Initial welcome on first load (no activeSessionId)
-  useEffect(() => {
-    if (!activeSessionId) setWelcome();
-  }, [user, userProfile, setWelcome, activeSessionId]);
+    if (activeSessionId) {
+      // --- Restore an existing session from MongoDB ---
+      welcomeShownRef.current = false; // reset so next fresh chat shows welcome
+      (async () => {
+        try {
+          const session = await getChatSession(user.uid, activeSessionId);
+          if (!isMounted.current) return;
+          setSessionId(activeSessionId);
+          const loaded: Message[] = (session.messages ?? []).map((m: ChatMessage) => ({
+            role: m.role,
+            content: m.content,
+          }));
+          setMessages(loaded.length > 0 ? loaded : [buildWelcome()]);
+        } catch {
+          toast.error("Could not load chat session.");
+          setMessages([buildWelcome()]);
+        }
+      })();
+    } else {
+      // --- Fresh chat: show welcome once, never again until a new fresh start ---
+      if (!welcomeShownRef.current) {
+        welcomeShownRef.current = true;
+        setSessionId(null);
+        setMessages([buildWelcome()]);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessionId, user]);
+  // NOTE: buildWelcome intentionally omitted from deps — it changes when
+  // userProfile loads, but we do NOT want to re-run this effect (and wipe
+  // an in-progress conversation) just because the profile resolved.
+  // The welcome text will still be correct because buildWelcome() is called
+  // at the moment the effect runs (after auth + profile have settled).
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
