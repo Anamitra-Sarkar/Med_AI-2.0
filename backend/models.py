@@ -15,23 +15,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Custom Keras layers — must be registered BEFORE any model is loaded
 # ---------------------------------------------------------------------------
-# MBConvBlock is the core building block of the skin EfficientNet BEAST v2
-# model. Keras 3 cannot deserialize custom layers from a .keras file unless
-# the class is decorated with @register_keras_serializable AND imported
-# (i.e. the decorator has actually run) before load_model() is called.
-# We define it here at module import time so the registry is always populated.
-
 import keras
 
 
 @keras.saving.register_keras_serializable(package="custom")
 class MBConvBlock(keras.layers.Layer):
-    """Mobile Inverted Bottleneck Conv block with optional Squeeze-and-Excitation.
-
-    Config keys mirror those stored in the .keras bundle:
-        filters, kernel_size, strides, expand_ratio, se_ratio,
-        drop_connect_rate, input_filters
-    """
+    """Mobile Inverted Bottleneck Conv block with optional Squeeze-and-Excitation."""
 
     def __init__(
         self,
@@ -58,14 +47,12 @@ class MBConvBlock(keras.layers.Layer):
         self._use_residual = (strides == 1 and input_filters == filters)
 
     def build(self, input_shape):
-        # Expansion phase (pointwise) — skip when expand_ratio == 1
         if self.expand_ratio != 1:
             self._expand_conv = keras.layers.Conv2D(
                 self._expanded_filters, 1, padding="same", use_bias=False
             )
             self._expand_bn = keras.layers.BatchNormalization()
 
-        # Depthwise conv
         self._dw_conv = keras.layers.DepthwiseConv2D(
             self.kernel_size,
             strides=self.strides,
@@ -74,7 +61,6 @@ class MBConvBlock(keras.layers.Layer):
         )
         self._dw_bn = keras.layers.BatchNormalization()
 
-        # Squeeze-and-Excitation
         if self.se_ratio > 0:
             self._se_reduce = keras.layers.Conv2D(
                 self._se_filters, 1, padding="same", activation="swish"
@@ -83,13 +69,11 @@ class MBConvBlock(keras.layers.Layer):
                 self._expanded_filters, 1, padding="same", activation="sigmoid"
             )
 
-        # Pointwise projection
         self._project_conv = keras.layers.Conv2D(
             self.filters, 1, padding="same", use_bias=False
         )
         self._project_bn = keras.layers.BatchNormalization()
 
-        # Stochastic depth (drop connect)
         if self.drop_connect_rate > 0 and self._use_residual:
             self._drop = keras.layers.Dropout(
                 self.drop_connect_rate, noise_shape=(None, 1, 1, 1)
@@ -102,23 +86,18 @@ class MBConvBlock(keras.layers.Layer):
     def call(self, inputs, training=None):
         x = inputs
 
-        # Expansion
         if self.expand_ratio != 1:
             x = keras.activations.swish(self._expand_bn(self._expand_conv(x), training=training))
 
-        # Depthwise
         x = keras.activations.swish(self._dw_bn(self._dw_conv(x), training=training))
 
-        # SE
         if self.se_ratio > 0:
             se = keras.layers.GlobalAveragePooling2D(keepdims=True)(x)
             se = self._se_expand(self._se_reduce(se))
             x = x * se
 
-        # Projection
         x = self._project_bn(self._project_conv(x), training=training)
 
-        # Residual + drop connect
         if self._use_residual:
             if self._drop is not None:
                 x = self._drop(x, training=training)
@@ -153,8 +132,6 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "weights_file": "model_weights.weights.h5",
         "framework": "keras_json_weights",
         "input_size": (224, 224),
-        # Model outputs index 0 = Cataract, index 1 = Normal
-        # (matches the training class order from the HuggingFace repo)
         "classes": ["Cataract", "Normal"],
     },
     "diabetic_retinopathy": {
@@ -162,12 +139,16 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "filename": "best_model.h5",
         "framework": "tf",
         "input_size": (384, 384),
+        # IDRiD dataset standard 5-class grading (Grade 0–4)
+        # Order MUST match the training label encoding:
+        #   0 → No DR  |  1 → Mild  |  2 → Moderate
+        #   3 → Severe  |  4 → Proliferative DR
         "classes": [
-            "No DR",
-            "Mild",
-            "Moderate",
-            "Severe",
-            "Proliferative DR",
+            "Grade 0 - No DR",
+            "Grade 1 - Mild DR",
+            "Grade 2 - Moderate DR",
+            "Grade 3 - Severe DR",
+            "Grade 4 - Proliferative DR",
         ],
     },
     "kidney": {
@@ -179,7 +160,6 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
     },
     "skin": {
         "repo_id": "Arko007/skin-disease-detector-ai",
-        # Custom EfficientNet BEAST v2 with MBConvBlock — Keras 3 .keras bundle
         "filename": "model.keras",
         "framework": "keras3",
         "input_size": (512, 512),
@@ -212,11 +192,34 @@ _load_locks: dict[str, threading.Lock] = {k: threading.Lock() for k in MODEL_REG
 # ---------------------------------------------------------------------------
 
 def _preprocess_image_tf(image_bytes: bytes, target_size: tuple[int, int]) -> np.ndarray:
-    """Return a (1, H, W, 3) float32 array normalised to [0, 1]."""
+    """Generic PIL-based preprocessing — returns (1, H, W, 3) float32 in [0,1]."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize(target_size, Image.LANCZOS)
     arr = np.array(img, dtype=np.float32) / 255.0
     return np.expand_dims(arr, axis=0)
+
+
+def _preprocess_dr(image_bytes: bytes) -> np.ndarray:
+    """Preprocessing that EXACTLY replicates the IDRiD training pipeline.
+
+    The model (Arko007/diabetic-retinopathy-v1) was trained with:
+        img = cv2.imread(path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, (384, 384))          # INTER_LINEAR (default)
+        img = img.astype(np.float32) / 255.0
+
+    Using PIL LANCZOS instead shifts pixel value distributions enough to
+    move the model's confidence away from the correct grade, causing it to
+    falsely predict Grade 0 (No DR) on images that clearly show DR lesions.
+    We replicate cv2 behaviour here using only numpy + PIL to avoid adding
+    the opencv-python dependency.
+    """
+    # Decode via PIL (always RGB)
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    # Replicate cv2.resize INTER_LINEAR via PIL BILINEAR — same algorithm
+    img = img.resize((384, 384), Image.BILINEAR)
+    arr = np.array(img, dtype=np.float32) / 255.0
+    return np.expand_dims(arr, axis=0)   # (1, 384, 384, 3)
 
 
 def _preprocess_image_torch(image_bytes: bytes, target_size: tuple[int, int]):
@@ -276,40 +279,30 @@ def _load_model(name: str) -> Any:
     cfg = MODEL_REGISTRY[name]
     fw = cfg["framework"]
 
-    # ── Cataract: architecture JSON + weights.h5 stored separately ────────────
     if fw == "keras_json_weights":
         import json
-
         arch_path = _download(cfg["repo_id"], cfg["arch_file"])
         weights_path = _download(cfg["repo_id"], cfg["weights_file"])
-
         with open(arch_path, "r") as f:
             arch_json = json.load(f)
-
         model = keras.models.model_from_json(
             arch_json if isinstance(arch_json, str) else json.dumps(arch_json)
         )
         model.load_weights(weights_path)
         return model
 
-    # ── Skin: Keras 3 .keras bundle with custom MBConvBlock ────────────────
-    # MBConvBlock is registered above via @register_keras_serializable so
-    # keras.saving.load_model can locate it during deserialization.
     if fw == "keras3":
         path = _download(cfg["repo_id"], cfg["filename"])
         return keras.saving.load_model(path, compile=False)
 
-    # ── Plain .h5 full model ──────────────────────────────────────────
     if fw == "tf":
         import tensorflow as tf
         path = _download(cfg["repo_id"], cfg["filename"])
         return tf.keras.models.load_model(path, compile=False)
 
-    # ── PyTorch EfficientNet (efficientnet-pytorch library) ───────────────
     if fw == "pytorch_efficientnet":
         import torch
         from efficientnet_pytorch import EfficientNet
-
         path = _download(cfg["repo_id"], cfg["filename"])
         model = EfficientNet.from_name("efficientnet-b0", num_classes=len(cfg["classes"]))
         state = torch.load(path, map_location="cpu", weights_only=False)
@@ -319,20 +312,16 @@ def _load_model(name: str) -> Any:
         model.eval()
         return model
 
-    # ── PyTorch cardiac CNN (weights-only .pt) ──────────────────────────
     if fw == "pytorch_cardiac":
         import torch
-
         path = _download(cfg["repo_id"], cfg["filename"])
         state = torch.load(path, map_location="cpu", weights_only=False)
-
         if isinstance(state, dict):
             sd = state.get("model_state_dict", state)
             model = _build_cardiac_model(len(cfg["classes"]))
             model.load_state_dict(sd, strict=False)
         else:
             model = state
-
         model.eval()
         return model
 
@@ -346,7 +335,7 @@ def get_model(name: str) -> Any:
     if name not in _loaded_models:
         with _load_locks[name]:
             if name not in _loaded_models:
-                logger.info("Loading model %s \u2026", name)
+                logger.info("Loading model %s …", name)
                 _loaded_models[name] = _load_model(name)
                 logger.info("Model %s loaded and cached.", name)
     return _loaded_models[name]
@@ -364,7 +353,13 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
     size = cfg["input_size"]
 
     if fw in ("tf", "keras3", "keras_json_weights"):
-        inp = _preprocess_image_tf(image_bytes, size)
+        # Diabetic retinopathy uses its own preprocessing pipeline that
+        # exactly replicates the cv2-based IDRiD training script.
+        if name == "diabetic_retinopathy":
+            inp = _preprocess_dr(image_bytes)
+        else:
+            inp = _preprocess_image_tf(image_bytes, size)
+
         raw = model.predict(inp, verbose=0)
         probs = raw[0]
 
@@ -383,7 +378,7 @@ def predict(name: str, image_bytes: bytes) -> dict[str, float]:
 
         return {c: round(p, 6) for c, p in zip(classes, probs_list)}
 
-    # PyTorch
+    # PyTorch path
     import torch
 
     inp = _preprocess_image_torch(image_bytes, size)
