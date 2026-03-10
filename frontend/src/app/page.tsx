@@ -101,31 +101,137 @@ function Section({
   );
 }
 
-/* ─── ECG Heartbeat SVG ───
-   A single repeating tile: flat baseline → sharp spike (QRS) → flat.
-   Two identical tiles are placed side-by-side so the scrolling loop
-   is completely seamless. The viewBox width (800) matches the tile width
-   used in the path so no gap ever appears.
-─── */
-function EcgLine({ y, opacity, duration }: { y: string; opacity: number; duration: number }) {
-  /*
-   * One ECG tile (width=800, height=120, baseline at y=60):
-   *   flat → small P wave → flat → sharp QRS spike → flat → small T wave → flat
-   * We draw two tiles end-to-end (total width 1600) and translate-X from 0 → -800
-   * so the animation loops perfectly.
-   */
-  const tile =
-    "M0,60 L80,60 L100,55 L120,60 L200,60 " +       // P-wave
-    "L260,60 L280,20 L290,60 L300,100 L310,60 L320,60 " + // QRS complex
-    "L380,60 L400,50 L440,60 L520,60 " +              // T-wave
-    "L800,60";                                         // back to flat
+/* ─────────────────────────────────────────────────────────────────
+   ECG WAVEFORM DESIGNS
+   5 distinct clinically-inspired morphologies, each 800 units wide.
+   baseline at y=60, amplitude range roughly 10–90.
+   All are duplicated end-to-end (offset +800) for seamless looping.
+───────────────────────────────────────────────────────────────── */
 
-  // Second tile offset by 800
-  const tile2 =
-    "M800,60 L880,60 L900,55 L920,60 L1000,60 " +
-    "L1060,60 L1080,20 L1090,60 L1100,100 L1110,60 L1120,60 " +
-    "L1180,60 L1200,50 L1240,60 L1320,60 " +
-    "L1600,60";
+/**
+ * Design A — Classic Normal Sinus Rhythm
+ * P wave → PR interval → sharp narrow QRS → ST segment → rounded T wave
+ */
+function buildA(): string {
+  const t =
+    "M0,60 L60,60 " +                             // pre-P flat
+    "L80,54 L100,60 " +                           // P wave (gentle hump)
+    "L160,60 " +                                  // PR interval
+    "L200,60 L210,18 L218,60 L226,88 L234,60 " + // QRS: Q dip, tall R, S dip
+    "L270,60 " +                                  // ST segment
+    "L300,52 L330,60 " +                          // T wave (rounded)
+    "L800,60";                                    // back to flat
+  return t + " " + shiftPath(t, 800);
+}
+
+/**
+ * Design B — Broad Notched QRS (Bundle Branch pattern)
+ * Wide double-peaked R wave, prominent S, visible U wave after T
+ */
+function buildB(): string {
+  const t =
+    "M0,60 L70,60 " +
+    "L90,56 L110,60 " +                           // P wave
+    "L150,60 " +
+    "L180,60 L195,35 L210,45 L222,25 L234,60 L248,75 L260,60 " + // notched R-R'
+    "L300,60 " +
+    "L325,50 L355,60 " +                          // T wave
+    "L385,57 L405,60 " +                          // U wave
+    "L800,60";
+  return t + " " + shiftPath(t, 800);
+}
+
+/**
+ * Design C — Peaked T-waves (Hyperkalaemia-like / athletic heart)
+ * Small QRS, very tall narrow T wave, no prominent P
+ */
+function buildC(): string {
+  const t =
+    "M0,60 L100,60 " +
+    "L120,57 L140,60 " +                          // small P
+    "L190,60 L200,52 L208,60 L216,68 L224,60 " + // small QRS
+    "L250,60 " +
+    "L270,22 L290,60 " +                          // tall peaked T
+    "L800,60";
+  return t + " " + shiftPath(t, 800);
+}
+
+/**
+ * Design D — ST Elevation pattern
+ * Normal QRS followed by a raised ST segment that curves into T
+ */
+function buildD(): string {
+  const t =
+    "M0,60 L50,60 " +
+    "L70,55 L90,60 " +                            // P wave
+    "L140,60 " +
+    "L165,60 L175,15 L183,60 L191,80 L200,60 " + // QRS
+    "L210,48 L240,44 L270,42 L300,48 L330,60 " + // elevated ST segment curving to T
+    "L800,60";
+  return t + " " + shiftPath(t, 800);
+}
+
+/**
+ * Design E — Atrial Flutter-like (rapid sawtooth baseline + QRS)
+ * Fast regular sawtooth flutter waves with periodic QRS break
+ */
+function buildE(): string {
+  // flutter waves every 40px, then a QRS interruption around x=400
+  const flutter = Array.from({ length: 10 }, (_, i) => {
+    const x0 = i * 40;
+    return `L${x0},60 L${x0 + 15},50 L${x0 + 30},65 L${x0 + 40},60`;
+  }).join(" ");
+  const t =
+    `M0,60 ${flutter} ` +                         // flutter baseline 0-400
+    "L390,60 L395,20 L403,60 L411,80 L420,60 " + // QRS break
+    "L440,60 " +
+    // second run of flutter 440-800
+    Array.from({ length: 9 }, (_, i) => {
+      const x0 = 440 + i * 40;
+      return `L${x0},60 L${x0 + 15},50 L${x0 + 30},65 L${x0 + 40},60`;
+    }).join(" ") +
+    " L800,60";
+  return t + " " + shiftPath(t, 800);
+}
+
+/** Shift all numeric X coordinates in a path string by +offset */
+function shiftPath(path: string, offset: number): string {
+  // Replace M/L followed by x,y — only shift x
+  return path.replace(/([ML])(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)/g, (_m, cmd, x, y) =>
+    `${cmd}${parseFloat(x) + offset},${y}`
+  );
+}
+
+/** The 5 builder functions, indexed for deterministic selection */
+const ECG_BUILDERS = [buildA, buildB, buildC, buildD, buildE];
+
+/** Unique gradient IDs per line to avoid SVG defs collision */
+const GRAD_COLORS: Array<[string, string]> = [
+  ["#2dd4bf", "#38bdf8"], // teal → sky
+  ["#34d399", "#60a5fa"], // emerald → blue
+  ["#5eead4", "#818cf8"], // teal → indigo
+  ["#22d3ee", "#a78bfa"], // cyan → violet
+  ["#2dd4bf", "#93c5fd"], // teal → light-blue
+  ["#6ee7b7", "#67e8f9"], // green → cyan
+  ["#38bdf8", "#c4b5fd"], // sky → purple
+];
+
+function EcgLine({
+  y,
+  opacity,
+  duration,
+  designIndex,
+  lineIndex,
+}: {
+  y: string;
+  opacity: number;
+  duration: number;
+  designIndex: number;
+  lineIndex: number;
+}) {
+  const pathData = ECG_BUILDERS[designIndex % ECG_BUILDERS.length]();
+  const gradId = `ecgGrad${lineIndex}`;
+  const [c1, c2] = GRAD_COLORS[lineIndex % GRAD_COLORS.length];
 
   return (
     <motion.svg
@@ -142,25 +248,39 @@ function EcgLine({ y, opacity, duration }: { y: string; opacity: number; duratio
         repeatType: "loop",
       }}
     >
+      <defs>
+        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor={c1} stopOpacity="0" />
+          <stop offset="15%" stopColor={c1} stopOpacity="1" />
+          <stop offset="85%" stopColor={c2} stopOpacity="1" />
+          <stop offset="100%" stopColor={c2} stopOpacity="0" />
+        </linearGradient>
+      </defs>
       <path
-        d={tile + " " + tile2.replace("M800,60", "L800,60")}
+        d={pathData}
         fill="none"
-        stroke="url(#ecgGrad)"
+        stroke={`url(#${gradId})`}
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <defs>
-        <linearGradient id="ecgGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0" />
-          <stop offset="20%" stopColor="#2dd4bf" stopOpacity="1" />
-          <stop offset="80%" stopColor="#38bdf8" stopOpacity="1" />
-          <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
-        </linearGradient>
-      </defs>
     </motion.svg>
   );
 }
+
+/* ─── 7 lines: position / opacity / speed / which design (0–4) ───
+   Design indices are spread so adjacent lines are never the same shape.
+   The sequence below cycles through A B C D E C B deliberately.
+─── */
+const ECG_LINES: Array<{ y: string; opacity: number; duration: number; design: number }> = [
+  { y: "5%",  opacity: 0.09, duration: 16, design: 0 }, // A — classic sinus
+  { y: "17%", opacity: 0.16, duration: 12, design: 1 }, // B — bundle branch
+  { y: "30%", opacity: 0.26, duration: 9,  design: 2 }, // C — peaked T
+  { y: "47%", opacity: 0.36, duration: 7,  design: 3 }, // D — ST elevation  (focal, brightest)
+  { y: "61%", opacity: 0.26, duration: 10, design: 4 }, // E — flutter
+  { y: "76%", opacity: 0.16, duration: 13, design: 2 }, // C again, different speed
+  { y: "89%", opacity: 0.09, duration: 17, design: 1 }, // B again, different speed
+];
 
 /* ═══════════════════════ PAGE ═══════════════════════ */
 
@@ -192,23 +312,20 @@ export default function Home() {
         </div>
 
         {/* ── ECG HEARTBEAT LINES ── */}
-        {/* Five staggered ECG lines at different vertical positions,
-            different speeds and opacities to fill the full viewport height.
-            They scroll horizontally in a perfect loop. */}
         <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-          {/* top-third lines */}
-          <EcgLine y="8%"  opacity={0.10} duration={14} />
-          <EcgLine y="18%" opacity={0.18} duration={11} />
-          {/* mid lines — slightly brighter, these are the hero band */}
-          <EcgLine y="35%" opacity={0.28} duration={9}  />
-          <EcgLine y="50%" opacity={0.35} duration={7}  />
-          <EcgLine y="63%" opacity={0.28} duration={10} />
-          {/* bottom lines */}
-          <EcgLine y="78%" opacity={0.18} duration={12} />
-          <EcgLine y="90%" opacity={0.10} duration={15} />
+          {ECG_LINES.map((line, i) => (
+            <EcgLine
+              key={i}
+              y={line.y}
+              opacity={line.opacity}
+              duration={line.duration}
+              designIndex={line.design}
+              lineIndex={i}
+            />
+          ))}
         </div>
 
-        {/* hero content — above ECG lines */}
+        {/* hero content */}
         <motion.div
           className="relative z-10 flex flex-col items-center gap-6"
           initial="hidden"
@@ -268,10 +385,7 @@ export default function Home() {
       </section>
 
       {/* ── ABOUT ── */}
-      <Section
-        id="about"
-        className="mx-auto max-w-4xl px-6 py-28"
-      >
+      <Section id="about" className="mx-auto max-w-4xl px-6 py-28">
         <motion.div
           variants={cardVariant}
           className="glass-card rounded-3xl p-10 text-center dark:glass-dark sm:p-14"
@@ -290,10 +404,7 @@ export default function Home() {
       </Section>
 
       {/* ── FEATURES ── */}
-      <Section
-        id="features"
-        className="mx-auto max-w-6xl px-6 py-28"
-      >
+      <Section id="features" className="mx-auto max-w-6xl px-6 py-28">
         <motion.h2
           variants={fadeUp}
           custom={0}
@@ -302,10 +413,7 @@ export default function Home() {
           Powerful Features
         </motion.h2>
 
-        <motion.div
-          variants={stagger}
-          className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
-        >
+        <motion.div variants={stagger} className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((f) => (
             <motion.div
               key={f.title}
@@ -328,10 +436,7 @@ export default function Home() {
       </Section>
 
       {/* ── CONTACT ── */}
-      <Section
-        id="contact"
-        className="mx-auto max-w-2xl px-6 py-28"
-      >
+      <Section id="contact" className="mx-auto max-w-2xl px-6 py-28">
         <motion.h2
           variants={fadeUp}
           custom={0}
@@ -346,42 +451,24 @@ export default function Home() {
           className="glass-card flex flex-col gap-5 rounded-3xl p-8 dark:glass-dark sm:p-10"
         >
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-              Name
-            </span>
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Name</span>
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/60 px-4 py-3 backdrop-blur dark:border-white/10 dark:bg-white/5">
               <FiUser className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Your name"
-                className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
-              />
+              <input type="text" placeholder="Your name" className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white" />
             </div>
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-              Email
-            </span>
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Email</span>
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white/60 px-4 py-3 backdrop-blur dark:border-white/10 dark:bg-white/5">
               <FiMail className="text-slate-400" />
-              <input
-                type="email"
-                placeholder="you@example.com"
-                className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
-              />
+              <input type="email" placeholder="you@example.com" className="w-full bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white" />
             </div>
           </label>
 
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
-              Message
-            </span>
-            <textarea
-              rows={4}
-              placeholder="How can we help?"
-              className="rounded-xl border border-slate-200 bg-white/60 px-4 py-3 text-sm text-slate-800 outline-none backdrop-blur placeholder:text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-white"
-            />
+            <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Message</span>
+            <textarea rows={4} placeholder="How can we help?" className="rounded-xl border border-slate-200 bg-white/60 px-4 py-3 text-sm text-slate-800 outline-none backdrop-blur placeholder:text-slate-400 dark:border-white/10 dark:bg-white/5 dark:text-white" />
           </label>
 
           <button
@@ -399,23 +486,13 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-6 py-10 sm:flex-row sm:justify-between">
           <div className="flex items-center gap-3">
             <Logo size="sm" />
-            <span className="text-sm font-semibold text-slate-700 dark:text-white">
-              Valeon
-            </span>
+            <span className="text-sm font-semibold text-slate-700 dark:text-white">Valeon</span>
           </div>
-
           <nav className="flex gap-6 text-sm text-slate-500 dark:text-slate-400">
-            <a href="#about" className="transition hover:text-teal-600 dark:hover:text-teal-400">
-              About
-            </a>
-            <a href="#features" className="transition hover:text-teal-600 dark:hover:text-teal-400">
-              Features
-            </a>
-            <a href="#contact" className="transition hover:text-teal-600 dark:hover:text-teal-400">
-              Contact
-            </a>
+            <a href="#about" className="transition hover:text-teal-600 dark:hover:text-teal-400">About</a>
+            <a href="#features" className="transition hover:text-teal-600 dark:hover:text-teal-400">Features</a>
+            <a href="#contact" className="transition hover:text-teal-600 dark:hover:text-teal-400">Contact</a>
           </nav>
-
           <p className="text-xs text-slate-400 dark:text-slate-500">
             &copy; {new Date().getFullYear()} Valeon. All rights reserved.
           </p>
