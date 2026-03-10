@@ -101,6 +101,67 @@ function Section({
   );
 }
 
+/* ─── ECG Heartbeat SVG ───
+   A single repeating tile: flat baseline → sharp spike (QRS) → flat.
+   Two identical tiles are placed side-by-side so the scrolling loop
+   is completely seamless. The viewBox width (800) matches the tile width
+   used in the path so no gap ever appears.
+─── */
+function EcgLine({ y, opacity, duration }: { y: string; opacity: number; duration: number }) {
+  /*
+   * One ECG tile (width=800, height=120, baseline at y=60):
+   *   flat → small P wave → flat → sharp QRS spike → flat → small T wave → flat
+   * We draw two tiles end-to-end (total width 1600) and translate-X from 0 → -800
+   * so the animation loops perfectly.
+   */
+  const tile =
+    "M0,60 L80,60 L100,55 L120,60 L200,60 " +       // P-wave
+    "L260,60 L280,20 L290,60 L300,100 L310,60 L320,60 " + // QRS complex
+    "L380,60 L400,50 L440,60 L520,60 " +              // T-wave
+    "L800,60";                                         // back to flat
+
+  // Second tile offset by 800
+  const tile2 =
+    "M800,60 L880,60 L900,55 L920,60 L1000,60 " +
+    "L1060,60 L1080,20 L1090,60 L1100,100 L1110,60 L1120,60 " +
+    "L1180,60 L1200,50 L1240,60 L1320,60 " +
+    "L1600,60";
+
+  return (
+    <motion.svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 1600 120"
+      preserveAspectRatio="none"
+      className="absolute left-0 w-[200%]"
+      style={{ top: y, opacity }}
+      animate={{ x: ["0%", "-50%"] }}
+      transition={{
+        duration,
+        repeat: Infinity,
+        ease: "linear",
+        repeatType: "loop",
+      }}
+    >
+      <path
+        d={tile + " " + tile2.replace("M800,60", "L800,60")}
+        fill="none"
+        stroke="url(#ecgGrad)"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <defs>
+        <linearGradient id="ecgGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#2dd4bf" stopOpacity="0" />
+          <stop offset="20%" stopColor="#2dd4bf" stopOpacity="1" />
+          <stop offset="80%" stopColor="#38bdf8" stopOpacity="1" />
+          <stop offset="100%" stopColor="#38bdf8" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+    </motion.svg>
+  );
+}
+
 /* ═══════════════════════ PAGE ═══════════════════════ */
 
 export default function Home() {
@@ -130,8 +191,26 @@ export default function Home() {
           />
         </div>
 
+        {/* ── ECG HEARTBEAT LINES ── */}
+        {/* Five staggered ECG lines at different vertical positions,
+            different speeds and opacities to fill the full viewport height.
+            They scroll horizontally in a perfect loop. */}
+        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+          {/* top-third lines */}
+          <EcgLine y="8%"  opacity={0.10} duration={14} />
+          <EcgLine y="18%" opacity={0.18} duration={11} />
+          {/* mid lines — slightly brighter, these are the hero band */}
+          <EcgLine y="35%" opacity={0.28} duration={9}  />
+          <EcgLine y="50%" opacity={0.35} duration={7}  />
+          <EcgLine y="63%" opacity={0.28} duration={10} />
+          {/* bottom lines */}
+          <EcgLine y="78%" opacity={0.18} duration={12} />
+          <EcgLine y="90%" opacity={0.10} duration={15} />
+        </div>
+
+        {/* hero content — above ECG lines */}
         <motion.div
-          className="flex flex-col items-center gap-6"
+          className="relative z-10 flex flex-col items-center gap-6"
           initial="hidden"
           animate="visible"
           variants={stagger}
@@ -178,7 +257,7 @@ export default function Home() {
 
         {/* scroll indicator */}
         <motion.div
-          className="absolute bottom-8"
+          className="absolute bottom-8 z-10"
           animate={{ y: [0, 10, 0] }}
           transition={{ duration: 2, repeat: Infinity }}
         >
