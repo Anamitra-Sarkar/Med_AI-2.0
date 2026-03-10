@@ -11,6 +11,7 @@ from typing import Any
 
 import bleach
 import httpx
+import numpy as np
 from bson import ObjectId
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -220,12 +221,10 @@ def summarize_prediction(model_name: str, predictions: dict[str, float]) -> str:
 def summarize_dr_prediction(predictions: dict[str, float]) -> str:
     """Grade-aware summarizer specifically for Diabetic Retinopathy.
 
-    Determines the predicted grade from the argmax, enriches it with
-    clinical language from DR_GRADE_META, and passes the full structured
-    context to the LLM so the summary accurately reflects the real grade
-    regardless of how close individual probabilities are.
+    Pre-extracts all dict values into plain variables so the prompt
+    f-string contains zero backslash escapes — required for Python 3.10
+    compatibility (PEP 701 backslash-in-fstring only lands in 3.12).
     """
-    # Map label strings back to grade index
     grade_keys = [
         "Grade 0 - No DR",
         "Grade 1 - Mild DR",
@@ -237,28 +236,31 @@ def summarize_dr_prediction(predictions: dict[str, float]) -> str:
     predicted_grade = int(np.argmax(probs))
     meta = DR_GRADE_META[predicted_grade]
 
-    sorted_preds = sorted(
-        zip(grade_keys, probs), key=lambda x: x[1], reverse=True
-    )
+    # Pre-extract to plain variables — no dict subscript inside f-string
+    grade_label = meta["label"]
+    grade_severity = meta["severity"]
+    grade_clinical = meta["clinical"]
+
+    sorted_preds = sorted(zip(grade_keys, probs), key=lambda x: x[1], reverse=True)
     prob_lines = "\n".join(
         f"  - {label}: {prob * 100:.2f}%" for label, prob in sorted_preds
     )
 
     prompt = (
-        f"A patient\'s retinal fundus image was analysed by the RetinaGuard DR Grading model "
-        f"(trained on the IDRiD dataset, 5-class grading system: Grade 0–4).\n\n"
-        f"Predicted grade: {meta[\'label\']}\n"
-        f"Severity: {meta[\'severity\']}\n"
-        f"Clinical finding: {meta[\'clinical\']}\n\n"
+        "A patient's retinal fundus image was analysed by the RetinaGuard DR Grading model "
+        "(trained on the IDRiD dataset, 5-class grading system: Grade 0-4).\n\n"
+        f"Predicted grade: {grade_label}\n"
+        f"Severity: {grade_severity}\n"
+        f"Clinical finding: {grade_clinical}\n\n"
         f"Full probability breakdown:\n{prob_lines}\n\n"
-        f"Write a clear, empathetic, patient-friendly summary that:\n"
-        f"1. States the detected DR grade and what it means in simple language.\n"
-        f"2. Explains the specific findings associated with this grade (e.g. microaneurysms, "
-        f"haemorrhages, exudates, new vessel growth) based on the severity level.\n"
-        f"3. Gives appropriate urgency: Grade 0 = reassuring but maintain check-ups; "
-        f"Grade 1–2 = monitor closely; Grade 3–4 = seek ophthalmologist urgently.\n"
-        f"4. Reminds the patient this is AI-assisted and a healthcare professional must confirm.\n"
-        f"Do NOT use markdown, bullet points, or thinking tags. Plain text only."
+        "Write a clear, empathetic, patient-friendly summary that:\n"
+        "1. States the detected DR grade and what it means in simple language.\n"
+        "2. Explains the specific findings associated with this grade (e.g. microaneurysms, "
+        "haemorrhages, exudates, new vessel growth) based on the severity level.\n"
+        "3. Gives appropriate urgency: Grade 0 = reassuring but maintain check-ups; "
+        "Grade 1-2 = monitor closely; Grade 3-4 = seek ophthalmologist urgently.\n"
+        "4. Reminds the patient this is AI-assisted and a healthcare professional must confirm.\n"
+        "Do NOT use markdown, bullet points, or thinking tags. Plain text only."
     )
 
     response = groq_client.chat.completions.create(
@@ -596,9 +598,7 @@ async def _run_diagnostic(model_key: str, file: UploadFile) -> dict:
         logger.error("Prediction error (%s): %s", model_key, exc)
         raise HTTPException(status_code=500, detail=f"Model inference failed: {exc}")
     try:
-        # DR gets its own grade-aware summarizer; all others use the generic one
         if model_key == "diabetic_retinopathy":
-            import numpy as np
             summary = summarize_dr_prediction(predictions)
         else:
             summary = summarize_prediction(model_key, predictions)
