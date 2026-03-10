@@ -284,8 +284,12 @@ def summarize_dr_prediction(predictions: dict[str, float]) -> str:
 async def root():
     return RedirectResponse(url="/docs")
 
-@app.api_route("/health", methods=["GET", "HEAD"])
-async def health_check():
+@app.get("/health", operation_id="health_check_get")
+async def health_check_get():
+    return {"status": "ok", "service": "valeon-api"}
+
+@app.head("/health", operation_id="health_check_head", include_in_schema=False)
+async def health_check_head():
     return {"status": "ok", "service": "valeon-api"}
 
 # ---------------------------------------------------------------------------
