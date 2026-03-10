@@ -153,7 +153,9 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "weights_file": "model_weights.weights.h5",
         "framework": "keras_json_weights",
         "input_size": (224, 224),
-        "classes": ["Normal", "Cataract"],
+        # Model outputs index 0 = Cataract, index 1 = Normal
+        # (matches the training class order from the HuggingFace repo)
+        "classes": ["Cataract", "Normal"],
     },
     "diabetic_retinopathy": {
         "repo_id": "Arko007/diabetic-retinopathy-v1",
@@ -290,20 +292,20 @@ def _load_model(name: str) -> Any:
         model.load_weights(weights_path)
         return model
 
-    # ── Skin: Keras 3 .keras bundle with custom MBConvBlock ──────────────────
+    # ── Skin: Keras 3 .keras bundle with custom MBConvBlock ────────────────
     # MBConvBlock is registered above via @register_keras_serializable so
     # keras.saving.load_model can locate it during deserialization.
     if fw == "keras3":
         path = _download(cfg["repo_id"], cfg["filename"])
         return keras.saving.load_model(path, compile=False)
 
-    # ── Plain .h5 full model ───────────────────────────────────────────────────
+    # ── Plain .h5 full model ──────────────────────────────────────────
     if fw == "tf":
         import tensorflow as tf
         path = _download(cfg["repo_id"], cfg["filename"])
         return tf.keras.models.load_model(path, compile=False)
 
-    # ── PyTorch EfficientNet (efficientnet-pytorch library) ───────────────────
+    # ── PyTorch EfficientNet (efficientnet-pytorch library) ───────────────
     if fw == "pytorch_efficientnet":
         import torch
         from efficientnet_pytorch import EfficientNet
@@ -317,7 +319,7 @@ def _load_model(name: str) -> Any:
         model.eval()
         return model
 
-    # ── PyTorch cardiac CNN (weights-only .pt) ────────────────────────────────
+    # ── PyTorch cardiac CNN (weights-only .pt) ──────────────────────────
     if fw == "pytorch_cardiac":
         import torch
 
