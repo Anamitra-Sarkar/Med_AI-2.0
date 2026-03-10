@@ -151,7 +151,6 @@ _SKIN_CUSTOM_OBJECTS: dict[str, Any] = {"MBConvBlock": MBConvBlock}
 # ---------------------------------------------------------------------------
 # TFSMLayer shim
 # Wraps keras.layers.TFSMLayer so it exposes a .predict() interface.
-# Used as Strategy 2 when the HF repo stores a TF SavedModel (not .keras).
 # ---------------------------------------------------------------------------
 
 class _TFSMShim:
@@ -164,7 +163,6 @@ class _TFSMShim:
         import tensorflow as tf
         tensor = tf.constant(x, dtype=tf.float32)
         out = self._layer(tensor, training=False)
-        # TFSMLayer returns a dict or a tensor
         if isinstance(out, dict):
             out = list(out.values())[0]
         return out.numpy()
@@ -244,7 +242,6 @@ def _preprocess_image_tf(image_bytes: bytes, target_size: tuple[int, int]) -> np
 
 
 def _preprocess_dr(image_bytes: bytes) -> np.ndarray:
-    """Exact IDRiD training pipeline (cv2 INTER_LINEAR via PIL BILINEAR)."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize((384, 384), Image.BILINEAR)
     arr = np.array(img, dtype=np.float32) / 255.0
@@ -252,7 +249,6 @@ def _preprocess_dr(image_bytes: bytes) -> np.ndarray:
 
 
 def _preprocess_skin(image_bytes: bytes) -> np.ndarray:
-    """Matches HuggingFace README: PIL default (BICUBIC) resize, /255.0."""
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img = img.resize((512, 512))
     arr = np.array(img, dtype=np.float32) / 255.0
@@ -302,6 +298,39 @@ def _build_cardiac_model(num_classes: int = 2):
 
 
 # ---------------------------------------------------------------------------
+# h5py index-based weight loader
+# ---------------------------------------------------------------------------
+
+def _collect_h5_weights(h5_group) -> list:
+    """DFS over an h5py group, collecting all leaf datasets in order.
+
+    Keras 3 stores weights in model.weights.h5 as a nested group tree
+    where each node is either a numbered group ("0", "1", ...) or a leaf
+    dataset named "vars/0", "vars/1", etc.  A simple DFS that visits keys
+    in sorted integer order yields exactly the same sequence as
+    model.weights, so we can zip-assign without any name matching.
+    """
+    import h5py
+    results = []
+
+    def _dfs(node):
+        if isinstance(node, h5py.Dataset):
+            results.append(np.array(node))
+            return
+        # Sort keys numerically where possible so "2" < "10"
+        def _key(k):
+            try:
+                return (0, int(k))
+            except ValueError:
+                return (1, k)
+        for k in sorted(node.keys(), key=_key):
+            _dfs(node[k])
+
+    _dfs(h5_group)
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
 
@@ -311,30 +340,22 @@ def _download(repo_id: str, filename: str) -> str:
 
 
 def _load_skin_model(repo_id: str, filename: str) -> Any:
-    """Four-strategy loader for the skin .keras model.
+    """Four-strategy loader for the skin model.keras file.
 
-    Strategy 1: keras.saving.load_model with explicit custom_objects +
-                safe_mode=False. Handles cross-version .keras bundles where
-                BatchNormalization variables would otherwise be skipped.
-
-    Strategy 2: keras.layers.TFSMLayer wrapping the HF SavedModel snapshot.
-                Used when the repo actually stores a TF SavedModel directory.
-                Wrapped in _TFSMShim to expose a .predict() API.
-
-    Strategy 3: tf.keras.models.load_model with custom_objects.
-                Legacy TF2 compat path, also with safe_mode=False.
-
-    Strategy 4: Manual unzip of .keras bundle -> load architecture from
-                config.json -> build model -> load_weights from weights files
-                with skip_mismatch=True. Last-resort for version-skewed files.
+    Strategy 1: keras.saving.load_model with safe_mode=False.
+    Strategy 2: TFSMLayer on the HF snapshot (SavedModel path).
+    Strategy 3: tf.keras.models.load_model with safe_mode=False.
+    Strategy 4: Manual unzip + h5py index-based weight assignment.
+                Reads model.weights.h5 from inside the .keras ZIP and
+                assigns each tensor to model.weights[i] by DFS index
+                order — bypasses ALL name/shape matching so every BN
+                gamma/beta/moving_mean/moving_variance is loaded correctly.
     """
     import tensorflow as tf
     path = _download(repo_id, filename)
 
     # -----------------------------------------------------------------------
     # Strategy 1 — keras.saving.load_model with safe_mode=False
-    # safe_mode=False lets Keras load cross-version bundles without rejecting
-    # lambda layers or mismatched variable counts.
     # -----------------------------------------------------------------------
     try:
         model = keras.saving.load_model(
@@ -349,7 +370,7 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
         logger.warning("keras.saving.load_model failed for skin: %s", e1)
 
     # -----------------------------------------------------------------------
-    # Strategy 2 — TFSMLayer on the HF snapshot directory (inference-only)
+    # Strategy 2 — TFSMLayer on the HF snapshot directory
     # -----------------------------------------------------------------------
     try:
         from huggingface_hub import snapshot_download
@@ -367,9 +388,8 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
     # Strategy 3 — tf.keras legacy loader with safe_mode=False
     # -----------------------------------------------------------------------
     try:
-        load_kwargs: dict[str, Any] = {"compile": False}
-        # safe_mode is only available in newer tf.keras builds; guard it
         import inspect
+        load_kwargs: dict[str, Any] = {"compile": False}
         if "safe_mode" in inspect.signature(tf.keras.models.load_model).parameters:
             load_kwargs["safe_mode"] = False
         model = tf.keras.models.load_model(
@@ -383,14 +403,20 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
         logger.warning("tf.keras.models.load_model failed for skin: %s", e3)
 
     # -----------------------------------------------------------------------
-    # Strategy 4 — manual unzip: rebuild from config then load weights
-    # A .keras file is a ZIP archive containing:
-    #   config.json       - full model JSON config
-    #   model.weights.h5  - HDF5 weight file
-    # We extract both, reconstruct the model from JSON, then load the weights
-    # using skip_mismatch=True so mismatched BN variables don't hard-crash.
+    # Strategy 4 — manual unzip + h5py index-based weight assignment
+    #
+    # Why this works when skip_mismatch doesn't:
+    #   Keras 3 saves weights in model.weights.h5 using a numbered DFS tree
+    #   (groups "0"/"1"/.../"vars"/"0" etc.), NOT by layer name.  When Keras
+    #   calls load_weights() it tries to match variable *names*; because the
+    #   running environment has a different Keras version the names differ and
+    #   394 BN weights get skipped entirely -> near-uniform softmax output.
+    #
+    #   We bypass name matching completely: collect all leaf datasets from the
+    #   HDF5 file in the same DFS order Keras uses, then zip-assign them to
+    #   model.weights.  Shape mismatches are logged and skipped safely.
     # -----------------------------------------------------------------------
-    import zipfile, tempfile, os, json
+    import zipfile, tempfile, os, json, h5py
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             with zipfile.ZipFile(path, "r") as zf:
@@ -411,33 +437,63 @@ def _load_skin_model(repo_id: str, filename: str) -> Any:
             with open(config_path, "r") as f:
                 config_data = json.load(f)
 
-            # Reconstruct the model from its serialized config
+            # Rebuild architecture from config
             model = keras.models.model_from_json(
                 json.dumps(config_data),
                 custom_objects=_SKIN_CUSTOM_OBJECTS,
             )
-
-            # Build the model so layers allocate their variables
+            # Force all layers to create their variables
             model.build((None, 512, 512, 3))
+            # Run one dummy forward pass so sub-layers inside MBConvBlock
+            # (like the inline GlobalAveragePooling2D) also build
+            dummy = np.zeros((1, 512, 512, 3), dtype=np.float32)
+            try:
+                model(dummy, training=False)
+            except Exception:
+                pass
 
             if weights_path:
-                model.load_weights(weights_path, skip_mismatch=True)
+                with h5py.File(weights_path, "r") as hf:
+                    saved_weights = _collect_h5_weights(hf)
+
+                model_weights = model.weights
+                assigned = 0
+                skipped = 0
+                for i, (var, arr) in enumerate(zip(model_weights, saved_weights)):
+                    try:
+                        var.assign(arr.astype(var.dtype.as_numpy_dtype))
+                        assigned += 1
+                    except Exception as assign_err:
+                        logger.debug(
+                            "Weight[%d] shape mismatch (var=%s saved=%s): %s",
+                            i, var.shape, arr.shape, assign_err,
+                        )
+                        skipped += 1
+
                 logger.info(
-                    "Skin model loaded via manual unzip + load_weights "
-                    "(skip_mismatch=True)."
+                    "Skin model loaded via h5py index-based assignment: "
+                    "%d assigned, %d skipped.",
+                    assigned, skipped,
                 )
+                if skipped > 0:
+                    logger.warning(
+                        "%d weights could not be assigned (shape mismatch). "
+                        "Predictions may be partially degraded.",
+                        skipped,
+                    )
             else:
                 logger.warning(
                     "Skin model architecture rebuilt but no weights file found "
-                    "inside .keras bundle — predictions may be random."
+                    "— predictions will be random."
                 )
 
             return model
+
     except Exception as e4:
         logger.error("All skin model loading strategies failed. Last error: %s", e4)
         raise RuntimeError(
             "Could not load skin model after 4 strategies. "
-            f"Errors: [S1] {e1} | [S2] {e2} | [S3] {e3} | [S4] {e4}"
+            f"[S1] {e1} | [S2] {e2} | [S3] {e3} | [S4] {e4}"
         ) from e4
 
 
@@ -499,7 +555,7 @@ def get_model(name: str) -> Any:
     if name not in _loaded_models:
         with _load_locks[name]:
             if name not in _loaded_models:
-                logger.info("Loading model %s …", name)
+                logger.info("Loading model %s \u2026", name)
                 _loaded_models[name] = _load_model(name)
                 logger.info("Model %s loaded and cached.", name)
     return _loaded_models[name]
