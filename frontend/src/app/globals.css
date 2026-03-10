@@ -22,7 +22,7 @@
 
 /* ---------- CSS variables: dark mode ---------- */
 .dark {
-  --background: #0f172a;
+  --background: #080f1a;
   --foreground: #e2e8f0;
   --card: #1e293b;
   --card-foreground: #e2e8f0;
@@ -94,22 +94,41 @@ body {
 }
 
 .dark .glass-card {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  background: rgba(13, 25, 48, 0.55);
+  border: 1px solid rgba(45, 212, 191, 0.15);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(45, 212, 191, 0.06);
+}
+
+.dark .glass-card:hover {
+  border-color: rgba(45, 212, 191, 0.3);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4), 0 0 32px rgba(45, 212, 191, 0.12);
+}
+
+/* ---------- Gradient text utility ---------- */
+.gradient-text {
+  background: linear-gradient(135deg, #2dd4bf 0%, #38bdf8 50%, #818cf8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ---------- Section ambient background ---------- */
+.section-bg {
+  background: linear-gradient(
+    180deg,
+    #080f1a 0%,
+    #071525 30%,
+    #07152a 60%,
+    #080f1a 100%
+  );
+  position: relative;
 }
 
 /* ---------- Hero gradient animation ---------- */
 @keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /* ---------- Custom scrollbar ---------- */
@@ -139,7 +158,6 @@ body {
   background: #64748b;
 }
 
-/* Firefox scrollbar */
 * {
   scrollbar-width: thin;
   scrollbar-color: #64748b transparent;
