@@ -5,7 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   FiX, FiEye, FiActivity, FiDroplet, FiSun, FiZap, FiMapPin,
   FiMessageSquare, FiFolder, FiChevronDown, FiPlus, FiTrash2,
+  FiDownload, FiExternalLink,
 } from "react-icons/fi";
+import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
 import {
   listChatSessions, deleteChatSession,
@@ -47,6 +49,31 @@ function formatDate(iso: string): string {
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** Open a data_url in a new browser tab for viewing */
+function viewUpload(u: UploadRecord) {
+  if (!u.data_url) { toast.error("No image data available for this scan."); return; }
+  const win = window.open();
+  if (!win) { toast.error("Pop-up blocked — please allow pop-ups for Valeon."); return; }
+  win.document.write(
+    `<!DOCTYPE html><html><head><title>${u.filename}</title>
+    <style>body{margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh;}
+    img{max-width:100%;max-height:100vh;object-fit:contain;border-radius:12px;}</style></head>
+    <body><img src="${u.data_url}" alt="${u.filename}" /></body></html>`
+  );
+  win.document.close();
+}
+
+/** Trigger a browser download of the stored image */
+function downloadUpload(u: UploadRecord) {
+  if (!u.data_url) { toast.error("No image data available for this scan."); return; }
+  const a = document.createElement("a");
+  a.href = u.data_url;
+  // Derive a sensible extension from the stored MIME type
+  const ext = u.file_type?.split("/")[1] ?? "png";
+  a.download = u.filename.includes(".") ? u.filename : `${u.filename}.${ext}`;
+  a.click();
 }
 
 export default function Sidebar({
@@ -250,13 +277,30 @@ export default function Sidebar({
                                 <p className="truncate text-xs font-medium text-white/70">{u.filename}</p>
                                 <p className="text-[10px] text-white/30">{u.model_label} · {formatDate(u.uploaded_at)}</p>
                               </div>
-                              <motion.button
-                                onClick={(e) => handleDeleteUpload(e, u.id)}
-                                whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                                className="hidden shrink-0 rounded p-1 text-white/20 transition-colors hover:text-red-400 group-hover:flex"
-                                aria-label="Delete upload record">
-                                <FiTrash2 size={12} />
-                              </motion.button>
+                              {/* Action buttons — visible on hover */}
+                              <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
+                                <motion.button
+                                  onClick={(e) => { e.stopPropagation(); viewUpload(u); }}
+                                  whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                                  className="rounded p-1 text-white/20 transition-colors hover:text-teal-400"
+                                  aria-label="View image" title="View">
+                                  <FiExternalLink size={12} />
+                                </motion.button>
+                                <motion.button
+                                  onClick={(e) => { e.stopPropagation(); downloadUpload(u); }}
+                                  whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                                  className="rounded p-1 text-white/20 transition-colors hover:text-blue-400"
+                                  aria-label="Download image" title="Download">
+                                  <FiDownload size={12} />
+                                </motion.button>
+                                <motion.button
+                                  onClick={(e) => handleDeleteUpload(e, u.id)}
+                                  whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                                  className="rounded p-1 text-white/20 transition-colors hover:text-red-400"
+                                  aria-label="Delete upload record">
+                                  <FiTrash2 size={12} />
+                                </motion.button>
+                              </div>
                             </motion.div>
                           );
                         })

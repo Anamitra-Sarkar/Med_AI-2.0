@@ -253,6 +253,8 @@ export interface UploadRecord {
   model_label: string;
   predictions?: Record<string, number> | null;
   summary?: string | null;
+  /** Base64 data URL of the original image — stored for in-app preview & download */
+  data_url?: string | null;
   uploaded_at: string;
 }
 

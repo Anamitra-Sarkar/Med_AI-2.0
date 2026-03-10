@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import Providers from "@/components/Providers";
+import ScreenshotDetector from "@/components/ScreenshotDetector";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,14 +10,12 @@ export const metadata: Metadata = {
   },
   description: "AI-powered medical diagnostic assistant — cataract screening, retinopathy, kidney, skin & cardiac analysis.",
   manifest: "/manifest.json",
-  // iOS Safari PWA
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "Valeon",
     startupImage: ["/icons/icon-512x512.png"],
   },
-  // Android / general
   applicationName: "Valeon",
   keywords: ["medical AI", "cataract", "retinopathy", "health", "diagnostic"],
   icons: {
@@ -32,12 +31,10 @@ export const metadata: Metadata = {
     shortcut: "/favicon.svg",
   },
   other: {
-    // Force iOS to use standalone mode (belt-and-suspenders alongside appleWebApp)
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "black-translucent",
     "apple-mobile-web-app-title": "Valeon",
-    // Microsoft tiles
     "msapplication-TileColor": "#0d9488",
     "msapplication-TileImage": "/icons/icon-144x144.png",
     "msapplication-config": "none",
@@ -64,6 +61,8 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
         <Providers>{children}</Providers>
+        {/* Global screenshot detection — listens on every page */}
+        <ScreenshotDetector />
       </body>
     </html>
   );

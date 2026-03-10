@@ -71,7 +71,8 @@ export default function DiagnosticModal({
     try {
       const res = await diagnoseImage(modelType, file);
       setResult(res);
-      // Record upload to MongoDB
+      // Record upload to MongoDB — include the base64 data_url so it can be
+      // viewed and downloaded later from the sidebar File Uploads section.
       if (user) {
         recordUpload({
           firebase_uid: user.uid,
@@ -81,9 +82,10 @@ export default function DiagnosticModal({
           model_label: MODEL_LABELS[modelType] || title,
           predictions: res.predictions,
           summary: res.summary,
+          data_url: preview,   // base64 data URL captured by FileReader
         })
           .then(() => onUploadRecorded?.())
-          .catch(() => {}); // non-blocking
+          .catch(() => {});
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Analysis failed";
