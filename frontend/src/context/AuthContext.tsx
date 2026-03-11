@@ -13,10 +13,16 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
-import { getFirebaseAuth, getGoogleProvider } from "@/lib/firebase";
+import {
+  getFirebaseAuth,
+  getGoogleProvider,
+  ensureFirebaseAuthPersistence,
+  isFirebaseConfigured,
+} from "@/lib/firebase";
 import { getProfile, type UserProfile } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 
@@ -29,15 +35,30 @@ interface AuthContextValue {
   refreshProfile: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<User>;
   signUp: (email: string, password: string) => Promise<User>;
-  signInWithGoogle: () => Promise<User>;
+  signInWithGoogle: () => Promise<User | null>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function shouldUseGoogleRedirectFlow(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean(navigatorWithStandalone.standalone);
+  const hasTouchInput =
+    window.matchMedia("(pointer: coarse)").matches ||
+    (navigatorWithStandalone.maxTouchPoints ?? 0) > 0;
+  const isCompactViewport = window.matchMedia("(max-width: 1024px)").matches;
+
+  return isStandalone || (hasTouchInput && isCompactViewport);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(isFirebaseConfigured());
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const { initTheme, resetTheme } = useTheme();
@@ -66,10 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const auth = getFirebaseAuth();
-    if (!auth) {
-      setLoading(false);
-      return;
-    }
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
@@ -88,6 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth();
     if (!auth) throw new Error("Firebase is not configured.");
+    await ensureFirebaseAuthPersistence(auth);
     const credential = await signInWithEmailAndPassword(auth, email, password);
     return credential.user;
   }, []);
@@ -95,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth();
     if (!auth) throw new Error("Firebase is not configured.");
+    await ensureFirebaseAuthPersistence(auth);
     const credential = await createUserWithEmailAndPassword(auth, email, password);
     return credential.user;
   }, []);
@@ -102,8 +122,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithGoogle = useCallback(async () => {
     const auth = getFirebaseAuth();
     if (!auth) throw new Error("Firebase is not configured.");
-    const credential = await signInWithPopup(auth, getGoogleProvider());
-    return credential.user;
+    await ensureFirebaseAuthPersistence(auth);
+
+    if (shouldUseGoogleRedirectFlow()) {
+      await signInWithRedirect(auth, getGoogleProvider());
+      return null;
+    }
+
+    try {
+      const credential = await signInWithPopup(auth, getGoogleProvider());
+      return credential.user;
+    } catch (error: unknown) {
+      const code =
+        typeof error === "object" && error && "code" in error ? String(error.code) : "";
+
+      if (code === "auth/popup-blocked") {
+        await signInWithRedirect(auth, getGoogleProvider());
+        return null;
+      }
+
+      throw error;
+    }
   }, []);
 
   const signOut = useCallback(async () => {

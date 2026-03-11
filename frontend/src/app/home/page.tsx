@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { FiSettings, FiMenu, FiPlus } from "react-icons/fi";
 import Link from "next/link";
+import AppLoadingScreen from "@/components/AppLoadingScreen";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 import Sidebar from "@/components/Sidebar";
@@ -69,12 +70,7 @@ export default function HomePage() {
   }, []);
 
   if (loading || !user || hasProfile === null || hasProfile === false) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <motion.div className="h-10 w-10 rounded-full border-4 border-teal-500 border-t-transparent"
-          animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
-      </div>
-    );
+    return <AppLoadingScreen message="Preparing your workspace…" />;
   }
 
   return (

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { FcGoogle } from "react-icons/fc";
 import { FiMail, FiLock, FiUser } from "react-icons/fi";
 import toast from "react-hot-toast";
+import AppLoadingScreen from "@/components/AppLoadingScreen";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 
@@ -61,28 +62,24 @@ export default function SignUpPage() {
 
   async function handleGoogle() {
     setSubmitting(true);
+    const loadingToast = toast.loading("Opening Google sign-in…");
     try {
-      await signInWithGoogle();
-      toast.success("Signed in with Google!");
-      router.push("/profile/create");
+      const signedInUser = await signInWithGoogle();
+      if (signedInUser) {
+        toast.success("Signed in with Google!");
+        router.push("/profile/create");
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Google sign-in failed";
       toast.error(message);
     } finally {
+      toast.dismiss(loadingToast);
       setSubmitting(false);
     }
   }
 
   if (authLoading || (!authLoading && user)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <motion.div
-          className="h-10 w-10 rounded-full border-4 border-teal-500 border-t-transparent"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-    );
+    return <AppLoadingScreen message="Setting up your account…" />;
   }
 
   return (
@@ -150,6 +147,7 @@ export default function SignUpPage() {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Your full name"
                 aria-label="Full name"
+                autoComplete="name"
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
@@ -169,6 +167,10 @@ export default function SignUpPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 aria-label="Email address"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
@@ -188,6 +190,7 @@ export default function SignUpPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Min. 6 characters"
                 aria-label="Password"
+                autoComplete="new-password"
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
@@ -207,6 +210,7 @@ export default function SignUpPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Re-enter password"
                 aria-label="Confirm password"
+                autoComplete="new-password"
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
