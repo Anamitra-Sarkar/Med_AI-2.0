@@ -14,6 +14,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut,
   type User,
 } from "firebase/auth";
@@ -88,6 +89,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const auth = getFirebaseAuth();
     if (!auth) return;
+
+    // Process any pending redirect result from signInWithRedirect.
+    // On mobile devices, Google sign-in uses the redirect flow, and getRedirectResult
+    // MUST be called after the redirect returns so Firebase can finalise the sign-in and
+    // emit the authenticated user via onAuthStateChanged.
+    ensureFirebaseAuthPersistence(auth)
+      .then(() => getRedirectResult(auth))
+      .catch((error: unknown) => {
+        // Firebase throws specific codes when there is simply no pending redirect
+        // (auth/no-auth-event, auth/null-user, auth/redirect-cancelled-by-user).
+        // These are expected on normal page loads and can be safely ignored.
+        // Any other error is unexpected and should be surfaced in the console.
+        const code =
+          typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code: unknown }).code)
+            : "";
+        const ignoredCodes = [
+          "auth/no-auth-event",
+          "auth/null-user",
+          "auth/redirect-cancelled-by-user",
+        ];
+        if (!ignoredCodes.includes(code)) {
+          console.error("[Auth] getRedirectResult error:", error);
+        }
+      });
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
