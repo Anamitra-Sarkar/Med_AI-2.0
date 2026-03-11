@@ -62,6 +62,7 @@ export default function SignUpPage() {
 
   async function handleGoogle() {
     setSubmitting(true);
+    const loadingToast = toast.loading("Opening Google sign-in…");
     try {
       const signedInUser = await signInWithGoogle();
       if (signedInUser) {
@@ -72,6 +73,7 @@ export default function SignUpPage() {
       const message = err instanceof Error ? err.message : "Google sign-in failed";
       toast.error(message);
     } finally {
+      toast.dismiss(loadingToast);
       setSubmitting(false);
     }
   }

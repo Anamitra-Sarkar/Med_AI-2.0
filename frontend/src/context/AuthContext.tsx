@@ -41,22 +41,27 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+function shouldUseGoogleRedirectFlow(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const navigatorWithStandalone = window.navigator as Navigator & { standalone?: boolean };
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    Boolean(navigatorWithStandalone.standalone);
+  const hasTouchInput =
+    window.matchMedia("(pointer: coarse)").matches ||
+    (navigatorWithStandalone.maxTouchPoints ?? 0) > 0;
+  const isCompactViewport = window.matchMedia("(max-width: 1024px)").matches;
+
+  return isStandalone || (hasTouchInput && isCompactViewport);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(isFirebaseConfigured());
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const { initTheme, resetTheme } = useTheme();
-
-  const shouldUseGoogleRedirect = useCallback(() => {
-    if (typeof window === "undefined") return false;
-
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
-
-    return isStandalone || /Android|webOS|iPhone|iPad|iPod|Mobile/i.test(window.navigator.userAgent);
-  }, []);
 
   const checkProfile = useCallback(async (uid: string) => {
     try {
@@ -119,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth) throw new Error("Firebase is not configured.");
     await ensureFirebaseAuthPersistence(auth);
 
-    if (shouldUseGoogleRedirect()) {
+    if (shouldUseGoogleRedirectFlow()) {
       await signInWithRedirect(auth, getGoogleProvider());
       return null;
     }
@@ -138,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       throw error;
     }
-  }, [shouldUseGoogleRedirect]);
+  }, []);
 
   const signOut = useCallback(async () => {
     const auth = getFirebaseAuth();
