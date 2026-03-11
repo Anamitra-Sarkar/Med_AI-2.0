@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { FiHeart, FiActivity, FiUser, FiMail } from "react-icons/fi";
 import toast from "react-hot-toast";
+import AppLoadingScreen from "@/components/AppLoadingScreen";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 import { createProfile } from "@/lib/api";
@@ -88,15 +89,7 @@ export default function ProfileCreatePage() {
   }
 
   if (authLoading || (!authLoading && !user)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <motion.div
-          className="h-10 w-10 rounded-full border-4 border-teal-500 border-t-transparent"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-    );
+    return <AppLoadingScreen message="Loading your profile…" />;
   }
 
   return (

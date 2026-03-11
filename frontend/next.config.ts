@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
+import createPWA from "next-pwa";
 
-// next-pwa v5 uses require() — types not available as ESM
-const withPWA = require("next-pwa")({
+const withPWA = createPWA({
   dest: "public",
   // Disable in development so hot-reload is not affected
   disable: process.env.NODE_ENV === "development",

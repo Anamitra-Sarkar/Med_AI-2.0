@@ -1,5 +1,13 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, Auth } from "firebase/auth";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  Auth,
+  setPersistence,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+} from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
@@ -34,11 +42,27 @@ function getFirebaseAuth(): Auth | null {
   return auth;
 }
 
+async function ensureFirebaseAuthPersistence(auth: Auth): Promise<void> {
+  for (const persistence of [
+    indexedDBLocalPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence,
+  ]) {
+    try {
+      await setPersistence(auth, persistence);
+      return;
+    } catch {
+      continue;
+    }
+  }
+}
+
 function getGoogleProvider(): GoogleAuthProvider {
   if (!googleProvider) {
     googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: "select_account" });
   }
   return googleProvider;
 }
 
-export { getFirebaseApp, getFirebaseAuth, getGoogleProvider };
+export { getFirebaseApp, getFirebaseAuth, getGoogleProvider, ensureFirebaseAuthPersistence };

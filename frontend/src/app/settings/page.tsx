@@ -13,6 +13,7 @@ import {
   FiSettings,
 } from "react-icons/fi";
 import toast from "react-hot-toast";
+import AppLoadingScreen from "@/components/AppLoadingScreen";
 import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 import { getProfile, updateProfile } from "@/lib/api";
@@ -107,15 +108,7 @@ export default function SettingsPage() {
   }
 
   if (authLoading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <motion.div
-          className="h-10 w-10 rounded-full border-4 border-teal-500 border-t-transparent"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-    );
+    return <AppLoadingScreen message="Loading your settings…" />;
   }
 
   return (

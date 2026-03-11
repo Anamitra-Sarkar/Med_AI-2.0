@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { FcGoogle } from "react-icons/fc";
 import { FiMail, FiLock } from "react-icons/fi";
 import toast from "react-hot-toast";
+import AppLoadingScreen from "@/components/AppLoadingScreen";
 import Logo from "@/components/Logo";
 import { useAuth } from "@/context/AuthContext";
 
@@ -59,9 +60,11 @@ export default function LoginPage() {
   async function handleGoogle() {
     setSubmitting(true);
     try {
-      await signInWithGoogle();
-      toast.success("Signed in with Google!");
-      router.push("/home");
+      const signedInUser = await signInWithGoogle();
+      if (signedInUser) {
+        toast.success("Signed in with Google!");
+        router.push("/home");
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Google sign-in failed";
       toast.error(message);
@@ -71,15 +74,7 @@ export default function LoginPage() {
   }
 
   if (authLoading || (!authLoading && user)) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <motion.div
-          className="h-10 w-10 rounded-full border-4 border-teal-500 border-t-transparent"
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        />
-      </div>
-    );
+    return <AppLoadingScreen message="Checking your sign-in…" />;
   }
 
   return (
@@ -147,6 +142,10 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 aria-label="Email address"
+                autoComplete="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
@@ -166,6 +165,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Your password"
                 aria-label="Password"
+                autoComplete="current-password"
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
               />
             </div>
