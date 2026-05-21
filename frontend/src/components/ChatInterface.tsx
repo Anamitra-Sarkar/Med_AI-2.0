@@ -329,51 +329,52 @@ export default function ChatInterface({ activeSessionId, onSessionCreated }: Cha
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background text-foreground">
-      <div className="medfield-bg relative flex-1 min-h-0 overflow-y-auto">
-        <div className={`relative z-10 mx-auto flex w-full max-w-[720px] flex-col gap-4 ${!hasStarted ? 'min-h-full' : ''}`}>
-          {!hasStarted && (
-            <div
-              className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-12 text-center"
-              style={{ minHeight: 'calc(100vh - 180px)' }}
-            >
-              <div className="fade-up relative">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-1 ring-1 ring-border shadow-[var(--shadow-lg)]">
-                  <svg viewBox="0 0 32 32" fill="none" className="h-8 w-8" aria-hidden>
-                    <path d="M16 5L27 23H5L16 5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className="text-primary" />
-                    <circle cx="16" cy="19" r="1.75" fill="currentColor" className="text-primary" />
-                  </svg>
-                </div>
-                <div
-                  className="absolute inset-0 rounded-2xl ring-1 ring-primary/20 animate-ping"
-                  style={{ animationDuration: "3s" }}
-                />
-              </div>
-              <div className="fade-up-delay-1 flex flex-col gap-2">
-                <h2 className="hero-type text-[clamp(2rem,5vw,3rem)] leading-tight text-foreground">Ask Valeon anything</h2>
-                <p className="mono-label">Health questions, image analysis, nearby care</p>
-              </div>
-              <div className="fade-up-delay-2 flex max-w-md flex-wrap justify-center gap-2">
-                {[
-                  "What are symptoms of anemia?",
-                  "Explain my MRI results",
-                  "Find nearby clinics",
-                  "Is high blood pressure dangerous?",
-                  "Analyze my eye scan",
-                  "What causes diabetes?",
-                ].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => setInput(q)}
-                    className="rounded-full border border-border bg-surface-1 px-3.5 py-1.5 text-xs text-muted-foreground shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:text-foreground hover:shadow-[var(--shadow-md)]"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Scroll container — must be a flex column so empty state can fill height */}
+      <div className="medfield-bg relative flex flex-1 flex-col overflow-y-auto">
 
-          {hasStarted && (
+        {/* Empty state — fills all available height and centers content */}
+        {!hasStarted && (
+          <div className="flex flex-1 flex-col items-center justify-center gap-6 px-4 text-center">
+            <div className="fade-up relative">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-1 ring-1 ring-border shadow-[var(--shadow-lg)]">
+                <svg viewBox="0 0 32 32" fill="none" className="h-8 w-8" aria-hidden>
+                  <path d="M16 5L27 23H5L16 5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" className="text-primary" />
+                  <circle cx="16" cy="19" r="1.75" fill="currentColor" className="text-primary" />
+                </svg>
+              </div>
+              <div
+                className="absolute inset-0 rounded-2xl ring-1 ring-primary/20 animate-ping"
+                style={{ animationDuration: "3s" }}
+              />
+            </div>
+            <div className="fade-up-delay-1 flex flex-col gap-2">
+              <h2 className="hero-type text-[clamp(2rem,5vw,3rem)] leading-tight text-foreground">Ask Valeon anything</h2>
+              <p className="mono-label">Health questions, image analysis, nearby care</p>
+            </div>
+            <div className="fade-up-delay-2 flex max-w-md flex-wrap justify-center gap-2">
+              {[
+                "What are symptoms of anemia?",
+                "Explain my MRI results",
+                "Find nearby clinics",
+                "Is high blood pressure dangerous?",
+                "Analyze my eye scan",
+                "What causes diabetes?",
+              ].map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setInput(q)}
+                  className="rounded-full border border-border bg-surface-1 px-3.5 py-1.5 text-xs text-muted-foreground shadow-[var(--shadow-sm)] transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:text-foreground hover:shadow-[var(--shadow-md)]"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Chat messages */}
+        {hasStarted && (
+          <div className="relative z-10 mx-auto flex w-full max-w-[720px] flex-col gap-4 px-4 py-6">
             <AnimatePresence initial={false}>
               {messages.map((msg, i) => (
                 <motion.div
@@ -427,10 +428,9 @@ export default function ChatInterface({ activeSessionId, onSessionCreated }: Cha
                 </motion.div>
               ))}
             </AnimatePresence>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
