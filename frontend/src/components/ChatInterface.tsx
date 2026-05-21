@@ -329,10 +329,13 @@ export default function ChatInterface({ activeSessionId, onSessionCreated }: Cha
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background text-foreground">
-      <div className="medfield-bg relative flex-1 overflow-y-auto px-4 py-6">
-        <div className="relative z-10 mx-auto flex w-full max-w-[720px] flex-col gap-4">
+      <div className="medfield-bg relative flex-1 min-h-0 overflow-y-auto">
+        <div className={`relative z-10 mx-auto flex w-full max-w-[720px] flex-col gap-4 ${!hasStarted ? 'min-h-full' : ''}`}>
           {!hasStarted && (
-            <div className="flex flex-col items-center justify-center gap-6 py-20 text-center">
+            <div
+              className="flex flex-1 flex-col items-center justify-center gap-6 px-4 py-12 text-center"
+              style={{ minHeight: 'calc(100vh - 180px)' }}
+            >
               <div className="fade-up relative">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-1 ring-1 ring-border shadow-[var(--shadow-lg)]">
                   <svg viewBox="0 0 32 32" fill="none" className="h-8 w-8" aria-hidden>
