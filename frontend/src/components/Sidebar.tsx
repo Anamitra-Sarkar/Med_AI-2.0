@@ -4,11 +4,12 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FiEye, FiActivity, FiDroplet, FiSun, FiZap, FiMapPin,
-  FiMessageSquare, FiFolder, FiChevronDown, FiPlus, FiTrash2,
+  FiMessageSquare, FiFolder, FiChevronDown, FiEdit2, FiPlus, FiTrash2,
   FiDownload, FiExternalLink,
 } from "react-icons/fi";
 import toast from "react-hot-toast";
 import { useAuth } from "@/context/AuthContext";
+import { formatHealthProfileSummary, useWorkspace } from "@/context/WorkspaceContext";
 import {
   listChatSessions, deleteChatSession,
   listUploadRecords, deleteUploadRecord,
@@ -21,6 +22,7 @@ interface SidebarProps {
   onMenuSelect: (key: string) => void;
   onNewChat: () => void;
   onRestoreChat: (sessionId: string) => void;
+  onOpenSymptomChecker: () => void;
   /** Increment to trigger re-fetch of chats */
   chatRefreshTick?: number;
   /** Increment to trigger re-fetch of uploads */
@@ -76,8 +78,91 @@ function downloadUpload(u: UploadRecord) {
   a.click();
 }
 
+function HealthProfileCard() {
+  const { healthProfile, updateHealthProfile } = useWorkspace();
+  const [open, setOpen] = useState(false);
+  const summary = formatHealthProfileSummary(healthProfile);
+
+  return (
+    <div className="rounded-xl border border-border bg-surface-offset text-xs shadow-[var(--shadow-sm)]">
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left"
+      >
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="mono-label">Health Profile</span>
+            <FiEdit2 size={11} className="text-muted-foreground" />
+          </div>
+          <p className="mt-1 truncate text-[10px] text-muted-foreground">{summary}</p>
+        </div>
+        <motion.div animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <FiChevronDown size={12} className="text-muted-foreground" />
+        </motion.div>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden border-t border-border px-3 py-3"
+          >
+            <div className="space-y-2">
+              <label className="block space-y-1">
+                <span className="text-[10px] text-muted-foreground">Age</span>
+                <input
+                  type="number"
+                  value={healthProfile.age}
+                  onChange={(e) => updateHealthProfile({ age: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Age"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] text-muted-foreground">Blood type</span>
+                <select
+                  value={healthProfile.bloodType}
+                  onChange={(e) => updateHealthProfile({ bloodType: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                >
+                  <option value="">Select blood type</option>
+                  {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((type) => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] text-muted-foreground">Known conditions</span>
+                <input
+                  type="text"
+                  value={healthProfile.conditions}
+                  onChange={(e) => updateHealthProfile({ conditions: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Comma-separated conditions"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] text-muted-foreground">Current medications</span>
+                <input
+                  type="text"
+                  value={healthProfile.medications}
+                  onChange={(e) => updateHealthProfile({ medications: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="Comma-separated medications"
+                />
+              </label>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function Sidebar({
-  isOpen, onToggle, onMenuSelect, onNewChat, onRestoreChat,
+  isOpen, onToggle, onMenuSelect, onNewChat, onRestoreChat, onOpenSymptomChecker,
   chatRefreshTick = 0, uploadRefreshTick = 0,
 }: SidebarProps) {
   const { user } = useAuth();
@@ -205,6 +290,18 @@ export default function Sidebar({
                 <FiPlus size={16} />
                 New Chat
               </motion.button>
+
+              <motion.button
+                onClick={onOpenSymptomChecker}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface-1 px-3 py-2.5 text-xs font-medium text-foreground shadow-[var(--shadow-sm)] transition-colors hover:bg-surface-offset"
+              >
+                <FiActivity size={16} />
+                Symptom Checker
+              </motion.button>
+
+              <HealthProfileCard />
 
               {/* ── Past Chats ── */}
               <SectionHeader label="Past Chats" open={chatsOpen}

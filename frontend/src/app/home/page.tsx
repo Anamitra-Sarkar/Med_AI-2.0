@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { FiSettings, FiPlus } from "react-icons/fi";
+import { FiBookOpen, FiSettings, FiPlus } from "react-icons/fi";
 import Link from "next/link";
 import AppLoadingScreen from "@/components/AppLoadingScreen";
 import Logo from "@/components/Logo";
@@ -12,6 +12,8 @@ import Sidebar from "@/components/Sidebar";
 import ChatInterface from "@/components/ChatInterface";
 import DiagnosticModal from "@/components/DiagnosticModal";
 import NearbyModal from "@/components/NearbyModal";
+import NotesPanel from "@/components/NotesPanel";
+import SymptomCheckerModal from "@/components/SymptomCheckerModal";
 import { isFirebaseConfigured } from "@/lib/firebase";
 
 const diagnosticTitles: Record<string, string> = {
@@ -29,6 +31,10 @@ export default function HomePage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [diagnosticModal, setDiagnosticModal] = useState({ open: false, modelType: "", title: "" });
   const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [symptomCheckerOpen, setSymptomCheckerOpen] = useState(false);
+  const [chatPrefillPrompt, setChatPrefillPrompt] = useState("");
+  const [chatPrefillVersion, setChatPrefillVersion] = useState(0);
 
   // Chat session state — drives ChatInterface
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -90,6 +96,7 @@ export default function HomePage() {
         onMenuSelect={handleMenuSelect}
         onNewChat={handleNewChat}
         onRestoreChat={handleRestoreChat}
+        onOpenSymptomChecker={() => setSymptomCheckerOpen(true)}
         chatRefreshTick={chatRefreshTick}
         uploadRefreshTick={uploadRefreshTick}
       />
@@ -130,6 +137,13 @@ export default function HomePage() {
               aria-label="New chat" title="New Chat">
               <FiPlus size={20} />
             </motion.button>
+            <motion.button
+              onClick={() => setNotesOpen((p) => !p)}
+              whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              className={`rounded-lg p-2 transition-colors ${notesOpen ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-surface-offset hover:text-foreground'}`}
+              aria-label="Notes" title="Notes">
+              <FiBookOpen size={20} />
+            </motion.button>
             {user && !user.isGuest && (
               <Link href="/settings"
                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
@@ -143,6 +157,8 @@ export default function HomePage() {
         <ChatInterface
           activeSessionId={activeSessionId}
           onSessionCreated={handleSessionCreated}
+          prefillPrompt={chatPrefillPrompt}
+          prefillVersion={chatPrefillVersion}
         />
       </div>
 
@@ -154,6 +170,15 @@ export default function HomePage() {
         onUploadRecorded={handleUploadRecorded}
       />
       <NearbyModal isOpen={nearbyOpen} onClose={() => setNearbyOpen(false)} />
+      <NotesPanel isOpen={notesOpen} onClose={() => setNotesOpen(false)} />
+      <SymptomCheckerModal
+        isOpen={symptomCheckerOpen}
+        onClose={() => setSymptomCheckerOpen(false)}
+        onSelectPrompt={(prompt) => {
+          setChatPrefillPrompt(prompt);
+          setChatPrefillVersion((v) => v + 1);
+        }}
+      />
     </div>
   );
 }

@@ -135,7 +135,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[oklch(0.1_0_0_/_0.5)] backdrop-blur-[4px]"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-[6px]"
           onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <motion.div

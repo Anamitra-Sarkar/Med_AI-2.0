@@ -25,6 +25,7 @@
   --sidebar-border: oklch(0.2 0.01 60 / 0.1);
   --font-geist-sans: "Geist Sans";
   --font-geist-mono: "Geist Mono";
+  --text-xs: clamp(0.75rem, 0.7rem + 0.15vw, 0.875rem);
   --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
   --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
   --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
