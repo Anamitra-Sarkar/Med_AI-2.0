@@ -43,8 +43,8 @@ export default function ChatInterface({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isMounted = useRef(true);
-  // Track whether welcome has already been shown to prevent re-firing
   const welcomeShownRef = useRef(false);
+  const isWelcomeState = messages.length === 1 && messages[0]?.role === "assistant";
 
   useEffect(() => {
     isMounted.current = true;
@@ -57,7 +57,6 @@ export default function ChatInterface({
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
-  // Build the welcome message string
   const buildWelcome = useCallback((): Message => {
     const displayName = userProfile?.name || user?.displayName || "Guest";
     return {
@@ -66,12 +65,9 @@ export default function ChatInterface({
     };
   }, [user, userProfile]);
 
-  // Single authoritative effect: handles both fresh start and session restore.
-  // Runs when activeSessionId changes OR when the user object becomes available.
   useEffect(() => {
     if (activeSessionId && canPersist && user) {
-      // --- Restore an existing session from MongoDB ---
-      welcomeShownRef.current = false; // reset so next fresh chat shows welcome
+      welcomeShownRef.current = false;
       (async () => {
         try {
           const session = await getChatSession(user.uid, activeSessionId);
@@ -90,7 +86,6 @@ export default function ChatInterface({
       return;
     }
 
-    // --- Fresh chat: show welcome once, never again until a new fresh start ---
     if (!welcomeShownRef.current) {
       welcomeShownRef.current = true;
       setSessionId(null);
@@ -98,11 +93,6 @@ export default function ChatInterface({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId, canPersist, user]);
-  // NOTE: buildWelcome intentionally omitted from deps — it changes when
-  // userProfile loads, but we do NOT want to re-run this effect (and wipe
-  // an in-progress conversation) just because the profile resolved.
-  // The welcome text will still be correct because buildWelcome() is called
-  // at the moment the effect runs (after auth + profile have settled).
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
@@ -134,7 +124,6 @@ export default function ChatInterface({
     clearFile();
     setStreaming(true);
 
-    // Ensure we have a session in MongoDB
     let currentSessionId = sessionId;
     if (!currentSessionId && canPersist && user) {
       try {
@@ -151,10 +140,11 @@ export default function ChatInterface({
       try {
         const result = await analyzeImage(currentFile, messageToSend);
         if (result.analysis) messageToSend = `[Image uploaded] ${result.analysis}\n\n${messageToSend}`;
-      } catch { /* continue */ }
+      } catch {
+        // continue
+      }
     }
 
-    // Persist user message
     if (currentSessionId && canPersist && user) {
       appendChatMessage(user.uid, currentSessionId, { role: "user", content: userMsg.content }).catch(() => {});
     }
@@ -199,7 +189,6 @@ export default function ChatInterface({
     } finally {
       setStreaming(false);
       abortRef.current = null;
-      // Persist assistant reply
       if (currentSessionId && canPersist && user && assistantContent) {
         appendChatMessage(user.uid, currentSessionId, { role: "assistant", content: assistantContent }).catch(() => {});
       }
@@ -208,73 +197,103 @@ export default function ChatInterface({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background text-foreground">
-      {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4">
-        <AnimatePresence initial={false}>
-          {messages.map((msg, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: msg.role === "user" ? 30 : -30, y: 10 }}
-              animate={{ opacity: 1, x: 0, y: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className={`message-enter flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-            >
-              {msg.role === "assistant" ? (
-                <div className="flex max-w-[85%] items-end gap-3 sm:max-w-[70%]">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--primary)_12%,var(--surface-1))] text-primary">
-                    <FiMessageCircle size={12} />
-                  </div>
-                  <div className="rounded-[16px_16px_16px_4px] border border-border bg-surface-1 px-4 py-3 text-sm leading-relaxed text-foreground shadow-[var(--shadow-sm)]">
-                    {msg.image && (
-                      <img src={msg.image} alt="Uploaded" className="mb-2 max-h-48 rounded-xl object-cover" />
-                    )}
-                    {msg.content ? (
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                    ) : (
-                      <div className="flex items-center gap-1.5 py-1 px-1">
-                        {[0, 1, 2].map((dot) => (
-                          <motion.div
-                            key={dot}
-                            className="h-2 w-2 rounded-full bg-primary"
-                            animate={{ opacity: [0.35, 1, 0.35], y: [0, -4, 0] }}
-                            transition={{ duration: 0.8, repeat: Infinity, delay: dot * 0.15, ease: "easeInOut" }}
-                          />
-                        ))}
+      <div className="relative flex-1 overflow-y-auto px-4 py-6">
+        <div className="absolute inset-0 grid-pattern opacity-20 pointer-events-none" />
+        <div className="relative mx-auto flex w-full max-w-[720px] flex-col gap-4">
+          {isWelcomeState ? (
+            <div className="flex flex-col items-center justify-center gap-4 py-16 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-surface-1 ring-1 ring-border shadow-[var(--shadow-md)]">
+                <FiMessageCircle size={22} className="text-primary" />
+              </div>
+              <div>
+                <h3 className="hero-type text-2xl text-foreground">Ask Valeon anything</h3>
+                <p className="mt-1 text-sm text-muted-foreground">Health questions, image analysis, nearby care</p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-2 pt-2">
+                {["What are symptoms of anemia?", "Explain my MRI results", "Find nearby clinics"].map((q) => (
+                  <button
+                    key={q}
+                    onClick={() => setInput(q)}
+                    className="rounded-full border border-border bg-surface-1 px-3.5 py-1.5 text-xs text-muted-foreground transition-all hover:border-primary/40 hover:text-foreground hover:shadow-[var(--shadow-sm)]"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <AnimatePresence initial={false}>
+              {messages.map((msg, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: msg.role === "user" ? 30 : -30, y: 10 }}
+                  animate={{ opacity: 1, x: 0, y: 0 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className={`message-enter flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {msg.role === "assistant" ? (
+                    <div className="flex max-w-[85%] items-start gap-3 sm:max-w-[72%]">
+                      <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-offset text-primary ring-1 ring-border">
+                        <FiMessageCircle size={13} />
                       </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="max-w-[85%] rounded-[16px_16px_4px_16px] bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground shadow-[var(--shadow-sm)] sm:max-w-[70%]">
-                  {msg.image && (
-                    <img src={msg.image} alt="Uploaded" className="mb-2 max-h-48 rounded-xl object-cover" />
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <span className="mono-label">Valeon</span>
+                        <div className="rounded-[4px_16px_16px_16px] border border-border bg-surface-1 px-4 py-3 text-sm leading-relaxed text-foreground shadow-[var(--shadow-sm)]">
+                          {msg.image && (
+                            <img src={msg.image} alt="Uploaded" className="mb-2 max-h-48 rounded-xl object-cover" />
+                          )}
+                          {msg.content ? (
+                            <p className="whitespace-pre-wrap">{msg.content}</p>
+                          ) : (
+                            <div className="flex items-center gap-1.5 px-1 py-1">
+                              {[0, 1, 2].map((dot) => (
+                                <motion.div
+                                  key={dot}
+                                  className="h-2 w-2 rounded-full bg-primary"
+                                  animate={{ opacity: [0.35, 1, 0.35], y: [0, -4, 0] }}
+                                  transition={{ duration: 0.8, repeat: Infinity, delay: dot * 0.15, ease: "easeInOut" }}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex max-w-[85%] flex-col items-end gap-1 sm:max-w-[72%]">
+                      <span className="mono-label pr-1">You</span>
+                      <div className="rounded-[16px_4px_16px_16px] bg-primary px-4 py-3 text-sm leading-relaxed text-primary-foreground shadow-[var(--shadow-sm)]">
+                        {msg.image && (
+                          <img src={msg.image} alt="Uploaded" className="mb-2 max-h-48 rounded-xl object-cover" />
+                        )}
+                        {msg.content ? <p className="whitespace-pre-wrap">{msg.content}</p> : null}
+                      </div>
+                    </div>
                   )}
-                  {msg.content ? (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  ) : null}
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-        <div ref={messagesEndRef} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Image preview strip */}
       <AnimatePresence>
         {filePreview && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-t border-border/30 px-4 pt-3 pb-1"
+            className="overflow-hidden border-t border-border/30 px-4 pb-1 pt-3"
           >
             <div className="relative inline-block">
               <img src={filePreview} alt="Preview" className="h-20 rounded-xl object-cover shadow-md" />
-              <motion.button onClick={clearFile} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md">
+              <motion.button
+                onClick={clearFile}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-white shadow-md"
+              >
                 <FiX size={10} />
               </motion.button>
             </div>
@@ -282,31 +301,42 @@ export default function ChatInterface({
         )}
       </AnimatePresence>
 
-      {/* Input area */}
-      <div className="border-t border-border bg-background">
+      <div className="border-t border-border bg-background/80 backdrop-blur-sm">
         <div className="mx-auto w-full max-w-[720px] px-4 py-4">
-        <div className="flex items-end gap-2 rounded-[14px] border border-border bg-surface-1 px-3 py-3 shadow-[var(--shadow-sm)] transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_15%,transparent),var(--shadow-sm)] sm:px-4">
-          <button onClick={() => fileInputRef.current?.click()}
-            className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
-            aria-label="Attach file">
-            <FiPaperclip size={18} />
-          </button>
-          <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
-          <textarea
-            rows={1}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-            placeholder="Ask Valeon anything about health..."
-            className="min-w-0 flex-1 resize-none bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
-          />
-          <motion.button onClick={handleSend} disabled={streaming || (!input.trim() && !file)}
-            whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-            className="btn-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label="Send message">
-            <FiSend size={16} />
-          </motion.button>
-        </div>
+          <div className="flex items-end gap-2 rounded-2xl border border-border bg-surface-1 px-4 py-3 shadow-[var(--shadow-sm)] transition-all focus-within:border-primary focus-within:shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_12%,transparent),var(--shadow-sm)]">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
+              aria-label="Attach file"
+            >
+              <FiPaperclip size={18} />
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" />
+            <textarea
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder="Ask Valeon anything about health..."
+              className="min-w-0 flex-1 resize-none bg-transparent text-sm leading-6 text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <motion.button
+              onClick={handleSend}
+              disabled={streaming || (!input.trim() && !file)}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              className="btn-primary flex h-10 w-10 shrink-0 items-center justify-center rounded-full p-0 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Send message"
+            >
+              <FiSend size={16} />
+            </motion.button>
+          </div>
+          <p className="mt-2 text-center mono-label opacity-60">Valeon can make mistakes — verify important health information</p>
         </div>
       </div>
     </div>

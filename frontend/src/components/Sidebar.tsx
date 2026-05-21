@@ -147,15 +147,14 @@ export default function Sidebar({
   }
 
   const SectionHeader = ({
-    label, icon: Icon, open, onToggle: toggle, count,
-  }: { label: string; icon: React.ElementType; open: boolean; onToggle: () => void; count?: number }) => (
+    label, open, onToggle: toggle, count,
+  }: { label: string; open: boolean; onToggle: () => void; count?: number }) => (
     <button
       onClick={toggle}
-      className="flex w-full items-center justify-between rounded-[var(--radius)] px-3 py-2 text-left transition-colors hover:bg-surface-offset"
+      className="flex w-full items-center justify-between px-3 py-2 text-left transition-colors hover:bg-surface-offset"
     >
       <div className="flex items-center gap-2">
-        <Icon size={14} className="text-primary" />
-        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</span>
+        <span className="mono-label">{label}</span>
         {count !== undefined && count > 0 && (
           <span className="rounded-full bg-surface-offset px-1.5 py-0.5 text-[10px] text-muted-foreground">{count}</span>
         )}
@@ -185,16 +184,14 @@ export default function Sidebar({
             ref={sidebarRef}
             initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-0 z-50 flex h-full w-[280px] flex-col border-r border-border bg-background lg:relative lg:z-auto"
+            className="fixed left-0 top-0 z-50 flex h-full w-[280px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] lg:relative lg:z-auto"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-border bg-surface-1 px-4 py-3">
-              <h2
-                className="text-sm tracking-tight text-foreground"
-                style={{ fontFamily: "'Instrument Serif', serif" }}
-              >
-                Valeon
-              </h2>
+            <div className="flex items-center justify-between border-b border-[var(--sidebar-border)] px-4 py-4">
+              <div className="flex flex-col gap-0.5">
+                <h2 className="hero-type text-xl text-foreground">Valeon</h2>
+                <span className="mono-label">Medical AI</span>
+              </div>
               <div className="flex items-center gap-1">
                 <motion.button onClick={onToggle} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
                   className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
@@ -217,7 +214,7 @@ export default function Sidebar({
               </motion.button>
 
               {/* ── Past Chats ── */}
-              <SectionHeader label="Past Chats" icon={FiMessageSquare} open={chatsOpen}
+              <SectionHeader label="Past Chats" open={chatsOpen}
                 onToggle={() => setChatsOpen((p) => !p)} count={sessions.length} />
               <AnimatePresence initial={false}>
                 {chatsOpen && (
@@ -259,7 +256,7 @@ export default function Sidebar({
               </AnimatePresence>
 
               {/* ── File Uploads ── */}
-              <SectionHeader label="File Uploads" icon={FiFolder} open={uploadsOpen}
+              <SectionHeader label="File Uploads" open={uploadsOpen}
                 onToggle={() => setUploadsOpen((p) => !p)} count={uploads.length} />
               <AnimatePresence initial={false}>
                 {uploadsOpen && (
@@ -320,7 +317,7 @@ export default function Sidebar({
               </AnimatePresence>
 
               {/* ── AI Diagnostic Tools ── */}
-              <SectionHeader label="Diagnostic Tools" icon={FiZap} open={toolsOpen}
+              <SectionHeader label="Diagnostic Tools" open={toolsOpen}
                 onToggle={() => setToolsOpen((p) => !p)} />
               <AnimatePresence initial={false}>
                 {toolsOpen && (
@@ -333,12 +330,15 @@ export default function Sidebar({
                           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.04, duration: 0.3 }}
                           onClick={() => onMenuSelect(item.key)}
-                          className="group flex w-full items-center gap-3 rounded-[var(--radius)] px-3 py-2.5 text-left text-sm text-muted-foreground transition-all hover:bg-surface-offset hover:text-foreground"
+                          className="group flex w-full items-center gap-3 rounded-[var(--radius)] px-3 py-2.5 text-left transition-all hover:bg-surface-offset hover:text-foreground"
                         >
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-offset transition-colors group-hover:bg-surface-2">
-                            <item.icon size={14} className="text-primary transition-colors" />
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-surface-offset text-[10px] font-medium text-muted-foreground transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                            {String(i + 1).padStart(2, "0")}
                           </div>
-                          <span className="text-xs leading-tight">{item.label}</span>
+                          <div className="flex min-w-0 flex-col">
+                            <span className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">{item.label}</span>
+                          </div>
+                          <item.icon size={12} className="ml-auto shrink-0 text-muted-foreground opacity-0 transition-all group-hover:opacity-100" />
                         </motion.button>
                       ))}
                     </div>
@@ -349,9 +349,10 @@ export default function Sidebar({
             </nav>
 
             {/* Footer */}
-            <div className="border-t border-border px-5 py-3">
-              <p className="text-center text-[10px] text-muted-foreground">
-                AI-powered diagnostics — not a substitute for professional medical advice
+            <div className="border-t border-[var(--sidebar-border)] px-5 py-4">
+              <div className="mb-2 h-px w-8 bg-primary opacity-40" />
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                AI-assisted tools — not a substitute<br />for professional medical advice
               </p>
             </div>
           </motion.aside>

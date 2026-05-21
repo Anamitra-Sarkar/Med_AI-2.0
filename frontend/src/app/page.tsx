@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
 import {
   FiMessageCircle,
   FiEye,
@@ -10,8 +9,6 @@ import {
   FiShield,
   FiCamera,
   FiSend,
-  FiMail,
-  FiUser,
 } from "react-icons/fi";
 import Logo from "@/components/Logo";
 import { useEffect } from "react";
@@ -59,95 +56,100 @@ export default function Home() {
   }, [router]);
 
   return (
-    <div
-      className="min-h-screen bg-background text-foreground"
-      style={{
-        backgroundImage:
-          "radial-gradient(ellipse 80% 40% at 50% -10%, color-mix(in oklch, var(--primary) 8%, transparent), transparent)",
-      }}
-    >
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl items-center px-6 py-16">
-        <div className="grid w-full gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <div className="space-y-8 text-left">
-            <Logo size="lg" />
-            <div className="space-y-4">
-              <h1
-                className="max-w-xl text-[clamp(3rem,8vw,5.5rem)] leading-[0.95] text-foreground"
-                style={{ fontFamily: "'Instrument Serif', serif" }}
-              >
-                Premium medical AI, designed with clarity.
+    <div className="bg-background text-foreground">
+      <div className="hero-mesh relative min-h-screen overflow-hidden noise-overlay">
+        <div className="absolute inset-0 grid-pattern opacity-[0.35]" />
+
+        <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col justify-between px-6 py-8">
+          <div className="flex items-center justify-between">
+            <Logo size="sm" />
+            <div className="flex items-center gap-3">
+              <Link href="/login" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
+                Sign in
+              </Link>
+              <Link href="/signup" className="btn-primary text-sm">
+                Get started
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid items-center gap-10 py-16 lg:grid-cols-[1.05fr_0.95fr]">
+            <div className="flex flex-col gap-6 lg:max-w-[65%]">
+              <span className="mono-label">Medical AI Platform — v2.0</span>
+              <h1 className="hero-type text-[clamp(3.5rem,9vw,7rem)] text-foreground">
+                Clinical AI,
+                <br />
+                <em>refined</em> for
+                <br />
+                real workflows.
               </h1>
-              <p className="max-w-xl text-[var(--text-base)] text-muted-foreground">
-                Valeon brings clinical precision and modern AI into one calm, confident workspace.
+              <p className="max-w-lg text-[var(--text-base)] leading-relaxed text-muted-foreground">
+                Valeon combines diagnostic imaging AI, health chat, and nearby care — in one workspace built for clarity and speed.
               </p>
+              <div className="flex flex-wrap items-center gap-3 pt-2">
+                <Link href="/signup" className="btn-primary inline-flex items-center gap-2 text-sm">
+                  Start for free
+                  <FiSend size={13} />
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-2 rounded-[var(--radius)] border border-border bg-transparent px-5 py-2.5 text-sm text-foreground transition-all hover:bg-surface-1 hover:shadow-[var(--shadow-sm)]"
+                >
+                  Already a member
+                </Link>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Link href="/signup" className="btn-primary inline-flex items-center justify-center gap-2">
-                Join Now
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex items-center justify-center rounded-[var(--radius)] border border-border bg-surface-1 px-5 py-2.5 text-sm font-medium text-foreground transition-[background-color,box-shadow,transform] duration-200 hover:bg-surface-offset hover:shadow-[var(--shadow-sm)]"
-              >
-                Sign In
-              </Link>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="surface-shimmer relative overflow-hidden rounded-2xl border border-border p-7 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)] lg:col-span-2">
+                <FiMessageCircle size={24} className="text-primary" />
+                <h3 className="mt-5 text-lg font-semibold tracking-tight text-foreground">AI Health Chat</h3>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  Thoughtful, context-aware conversations for everyday health questions — with your full profile in context.
+                </p>
+                <div className="absolute bottom-6 right-6 flex gap-1">
+                  {["Symptoms", "Medications", "Lifestyle"].map((tag) => (
+                    <span key={tag} className="rounded-full border border-border bg-surface-offset px-2.5 py-0.5 text-[10px] text-muted-foreground">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="surface-shimmer relative overflow-hidden rounded-2xl border border-border p-7 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]">
+                <FiEye size={24} className="text-primary" />
+                <h3 className="mt-5 text-lg font-semibold tracking-tight text-foreground">ClearView Cataract</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  AI-powered eye analysis for early detection and monitoring.
+                </p>
+              </div>
+
+              {features.slice(2).map((feature) => (
+                <div
+                  key={feature.title}
+                  className="rounded-2xl border border-border bg-surface-1 p-5 shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-md)]"
+                >
+                  <feature.icon size={18} className="text-primary" />
+                  <h3 className="mt-4 text-sm font-semibold text-foreground">{feature.title}</h3>
+                  <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{feature.desc}</p>
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {features.map((feature) => (
-              <motion.div
-                key={feature.title}
-                whileHover={{ y: -2 }}
-                transition={{ duration: 0.2 }}
-                className="rounded-[var(--radius)] border border-border bg-surface-1 p-5 shadow-[var(--shadow-sm)] transition-shadow hover:shadow-[var(--shadow-md)]"
-              >
-                <feature.icon size={20} className="text-primary" />
-                <h3 className="mt-4 text-base font-semibold text-foreground">{feature.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{feature.desc}</p>
-              </motion.div>
-            ))}
+          <div className="flex items-center gap-2 pb-4">
+            <div className="h-px w-12 bg-border" />
+            <span className="mono-label">6 AI modules</span>
           </div>
         </div>
-      </section>
+      </div>
 
-      <section className="mx-auto w-full max-w-6xl px-6 py-[clamp(3rem,6vw,6rem)]">
-        <div className="grid gap-6 rounded-[16px] border border-border bg-surface-1 p-6 shadow-[var(--shadow-sm)] lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <h2
-              className="text-[var(--text-xl)] text-foreground"
-              style={{ fontFamily: "'Instrument Serif', serif" }}
-            >
-              Built for calm, trustworthy health workflows.
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Clear visual hierarchy, restrained color, and a focused interface help the app feel less like a demo and more like a premium product.
-            </p>
-          </div>
-          <form className="grid gap-3">
-            <input
-              type="text"
-              placeholder="Name"
-              className="rounded-[var(--radius)] border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-primary focus:shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_15%,transparent)]"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              className="rounded-[var(--radius)] border border-border bg-background px-4 py-2.5 text-sm text-foreground outline-none transition focus:border-primary focus:shadow-[0_0_0_3px_color-mix(in_oklch,var(--primary)_15%,transparent)]"
-            />
-            <button type="button" className="btn-primary inline-flex items-center justify-center gap-2">
-              <FiSend size={16} />
-              Send Message
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-6xl px-6 pb-[clamp(3rem,6vw,6rem)]">
-        <div className="flex items-center gap-3">
-          <FiUser className="text-primary" />
-          <FiMail className="text-primary" />
-          <span className="text-sm text-muted-foreground">Clinical precision. Modern AI. No visual clutter.</span>
+      <section className="border-t border-border">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8">
+          <span className="mono-label">Not a substitute for professional medical advice</span>
+          <Link href="/signup" className="btn-primary text-sm">
+            Get started →
+          </Link>
         </div>
       </section>
     </div>

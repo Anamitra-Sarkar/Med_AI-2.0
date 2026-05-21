@@ -21,6 +21,8 @@
   --surface-1: #f4f3f0;
   --surface-2: #f0eeeb;
   --surface-offset: #e8e6e2;
+  --sidebar-bg: #f2f1ee;
+  --sidebar-border: oklch(0.2 0.01 60 / 0.1);
   --font-geist-sans: "Geist Sans";
   --font-geist-mono: "Geist Mono";
   --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
@@ -54,9 +56,12 @@
   --muted-foreground: #7a7875;
   --border: oklch(1 0 0 / 0.08);
   --ring: #3d9fa8;
+  --radius: 0.625rem;
   --surface-1: #181816;
   --surface-2: #1c1b19;
   --surface-offset: #232220;
+  --sidebar-bg: #0e0d0c;
+  --sidebar-border: oklch(1 0 0 / 0.06);
   --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.2);
   --shadow-md: 0 4px 16px oklch(0 0 0 / 0.3);
   --shadow-lg: 0 12px 40px oklch(0 0 0 / 0.45);
@@ -152,15 +157,89 @@ body {
   transform: translateY(0);
 }
 
+/* Noise texture overlay — adds analog warmth over flat surfaces */
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Mesh gradient hero background */
+.hero-mesh {
+  background:
+    radial-gradient(ellipse 70% 50% at 20% 20%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, color-mix(in oklch, var(--primary) 6%, transparent), transparent 60%),
+    radial-gradient(ellipse 50% 60% at 50% 50%, color-mix(in oklch, var(--primary) 3%, transparent), transparent 70%),
+    var(--background);
+}
+
+/* Animated subtle pulse for the hero accent */
+@keyframes meshPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.hero-mesh-animated {
+  background:
+    radial-gradient(ellipse 70% 50% at 20% 20%, color-mix(in oklch, var(--primary) 10%, transparent), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, color-mix(in oklch, var(--primary) 6%, transparent), transparent 60%),
+    var(--background);
+  animation: meshPulse 8s ease-in-out infinite;
+}
+
+/* Surface shimmer — for cards that should feel "alive" */
+.surface-shimmer {
+  background: linear-gradient(
+    135deg,
+    var(--surface-1) 0%,
+    color-mix(in oklch, var(--primary) 3%, var(--surface-1)) 50%,
+    var(--surface-1) 100%
+  );
+}
+
+/* Fine grid pattern — elegant background texture */
+.grid-pattern {
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(to right, var(--border) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Glowing border on primary action areas */
+.ring-primary-glow {
+  box-shadow: 0 0 0 1px var(--primary), 0 0 16px color-mix(in oklch, var(--primary) 20%, transparent);
+}
+
+/* Typography treatment for hero — optical tight spacing */
+.hero-type {
+  font-family: 'Instrument Serif', Georgia, serif;
+  letter-spacing: -0.03em;
+  line-height: 0.93;
+  font-weight: 400;
+}
+
+/* Monospaced callout */
+.mono-label {
+  font-family: var(--font-geist-mono, monospace);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
 @keyframes messageIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes loadProgress {
+  from { width: 0%; }
+  to { width: 100%; }
 }
 
 .message-enter {
