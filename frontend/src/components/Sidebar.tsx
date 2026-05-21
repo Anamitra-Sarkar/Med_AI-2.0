@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  FiX, FiEye, FiActivity, FiDroplet, FiSun, FiZap, FiMapPin,
+  FiEye, FiActivity, FiDroplet, FiSun, FiZap, FiMapPin,
   FiMessageSquare, FiFolder, FiChevronDown, FiPlus, FiTrash2,
   FiDownload, FiExternalLink,
 } from "react-icons/fi";
@@ -171,7 +171,7 @@ export default function Sidebar({
       <AnimatePresence>
         {isOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.15 }}
             className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
             onClick={onToggle} />
         )}
@@ -182,8 +182,8 @@ export default function Sidebar({
         {isOpen && (
           <motion.aside
             ref={sidebarRef}
-            initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            initial={{ x: -280, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -280, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             className="fixed left-0 top-0 z-50 flex h-full w-[280px] flex-col border-r border-[var(--sidebar-border)] bg-[var(--sidebar-bg)] lg:relative lg:z-auto"
           >
             {/* Header */}
@@ -193,10 +193,14 @@ export default function Sidebar({
                 <span className="mono-label">Medical AI</span>
               </div>
               <div className="flex items-center gap-1">
-                <motion.button onClick={onToggle} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+                <motion.button onClick={onToggle} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                   className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
                   aria-label="Close sidebar">
-                  <FiX size={18} />
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M9 3v18" />
+                    <path d="M15 9l-3 3 3 3" />
+                  </svg>
                 </motion.button>
               </div>
             </div>

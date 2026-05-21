@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { FiSettings, FiMenu, FiPlus } from "react-icons/fi";
+import { FiSettings, FiPlus } from "react-icons/fi";
 import Link from "next/link";
 import AppLoadingScreen from "@/components/AppLoadingScreen";
 import Logo from "@/components/Logo";
@@ -102,7 +102,11 @@ export default function HomePage() {
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
               aria-label="Toggle sidebar">
-              <FiMenu size={20} />
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <path d="M9 3v18" />
+                <path d="M12 9l3 3-3 3" />
+              </svg>
             </motion.button>
             <Logo size="sm" />
             <h1
