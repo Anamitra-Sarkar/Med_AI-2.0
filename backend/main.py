@@ -655,13 +655,30 @@ _OVERPASS_QUERY_TEMPLATE = (
 async def nearby_care(req: NearbyCareRequest):
     lat, lon, radius = req.lat, req.lon, req.radius
     query = _OVERPASS_QUERY_TEMPLATE.format(radius=radius, lat=lat, lon=lon)
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=5.0, read=28.0, write=5.0, pool=5.0)) as client:
-        try:
-            resp = await client.post(OVERPASS_URL, data={"data": query})
-        except httpx.TimeoutException:
-            raise HTTPException(status_code=504, detail="Overpass API timed out")
-        if resp.status_code != 200:
-            raise HTTPException(status_code=502, detail="Overpass API error")
+    headers = {
+        "Accept": "application/json",
+        "User-Agent": "Valeon-MedicalAI/1.0",
+    }
+    overpass_mirrors = [
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    ]
+    data_payload = {"data": query}
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=8.0, read=30.0, write=8.0, pool=8.0)) as client:
+        resp = None
+        for mirror_url in overpass_mirrors:
+            try:
+                resp = await client.post(mirror_url, data=data_payload, headers=headers)
+                if resp.status_code == 200:
+                    break
+                logger.warning("Overpass mirror %s returned %s", mirror_url, resp.status_code)
+                resp = None
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                logger.warning("Overpass mirror %s failed: %s", mirror_url, exc)
+                resp = None
+        if resp is None or resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"Overpass API unavailable (tried {len(overpass_mirrors)} mirrors)")
         data = resp.json()
     results = []
     for element in data.get("elements", []):

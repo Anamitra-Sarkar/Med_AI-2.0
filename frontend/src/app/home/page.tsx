@@ -94,7 +94,22 @@ export default function HomePage() {
         uploadRefreshTick={uploadRefreshTick}
       />
 
-      <div className="flex flex-1 flex-col min-w-0">
+      {/* Persistent sidebar toggle — always visible, outside sidebar */}
+      <button
+        onClick={() => setSidebarOpen((prev) => !prev)}
+        aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
+        className="fixed left-0 top-1/2 z-50 flex h-8 w-5 -translate-y-1/2 items-center justify-center rounded-r-lg border border-l-0 border-border bg-surface-1 text-muted-foreground shadow-md transition-all duration-200 hover:bg-surface-offset hover:text-foreground"
+        style={{
+          left: sidebarOpen ? "240px" : "0px",
+          transition: "left 200ms cubic-bezier(0.16,1,0.3,1)",
+        }}
+      >
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+          {sidebarOpen ? <path d="M7 3L3 8L7 13" /> : <path d="M3 3L7 8L3 13" />}
+        </svg>
+      </button>
+
+      <div className="medfield-bg flex flex-1 flex-col min-w-0">
         {/* Top bar */}
         <header className="flex shrink-0 items-center justify-between border-b border-border bg-[oklch(from_var(--surface-1)_l_c_h_/_0.95)] px-4 py-3 backdrop-blur-sm shadow-[var(--shadow-sm)]">
           <div className="flex items-center gap-3">

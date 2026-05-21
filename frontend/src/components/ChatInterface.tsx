@@ -329,8 +329,8 @@ export default function ChatInterface({ activeSessionId, onSessionCreated }: Cha
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background text-foreground">
-      <div className="topo-bg relative flex-1 overflow-y-auto px-4 py-6">
-                <div className="relative z-10 mx-auto flex w-full max-w-[720px] flex-col gap-4">
+      <div className="medfield-bg relative flex-1 overflow-y-auto px-4 py-6">
+        <div className="relative z-10 mx-auto flex w-full max-w-[720px] flex-col gap-4">
           {!hasStarted && (
             <div className="flex flex-col items-center justify-center gap-6 py-20 text-center">
               <div className="fade-up relative">

@@ -207,26 +207,35 @@ body {
   );
 }
 
-/* Topographic / ECG contour background — unique, clinical, not AI-generic */
-.topo-bg {
+/* DNA helix dot-field background — sparse, clinical, and distinct */
+.medfield-bg {
   position: relative;
   overflow: hidden;
 }
-.topo-bg::before {
+.medfield-bg::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -10%;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.45;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Cdefs%3E%3Cstyle%3Epath%7Bfill:none;stroke:%230a7c82;stroke-width:0.8;opacity:0.5%7D%3C/style%3E%3C/defs%3E%3Cpath d='M-100,300 C50,280 100,240 180,250 C230,257 260,310 320,295 C380,280 400,230 460,245 C520,260 540,315 600,300 C660,285 690,230 750,248 C810,266 840,310 900,295'/%3E%3Cpath d='M-100,330 C40,305 90,265 170,278 C230,288 265,340 330,322 C390,304 415,258 475,272 C535,286 555,338 618,325 C678,312 705,258 768,275 C828,292 855,335 920,322'/%3E%3Cpath d='M-100,360 C30,332 80,292 165,308 C228,320 270,370 338,350 C400,330 428,284 490,300 C550,316 572,362 636,348 C698,334 722,280 788,298 C848,316 872,358 940,344'/%3E%3Cpath d='M-100,390 C22,358 72,318 160,336 C226,350 275,402 346,380 C410,360 442,312 506,328 C568,344 590,390 654,376 C718,362 740,305 808,324 C870,342 895,384 960,368'/%3E%3Cpath d='M-100,270 C60,252 110,212 190,224 C245,232 275,288 338,270 C398,252 420,204 480,218 C540,232 560,286 622,272 C682,258 708,204 770,222 C830,240 858,282 918,268'/%3E%3Cpath d='M-100,240 C70,225 120,185 200,196 C258,204 285,260 348,243 C408,226 432,178 492,192 C552,206 570,260 634,246 C694,232 718,178 782,196 C842,214 868,254 930,240'/%3E%3Cpath d='M-100,420 C14,384 65,344 155,364 C224,380 278,432 352,410 C418,390 452,342 518,358 C580,374 604,418 670,404 C734,390 756,332 826,352 C888,370 914,412 980,396'/%3E%3Cpath d='M-100,450 C6,412 58,370 148,392 C220,410 280,462 358,438 C426,418 462,368 530,386 C594,402 618,448 686,432 C750,416 774,358 844,378 C908,396 932,440 1000,424'/%3E%3C/svg%3E");
-  background-size: cover;
-  background-position: center;
+  background-image:
+    radial-gradient(circle, oklch(0.52 0.09 192 / 0.18) 1.2px, transparent 1.2px),
+    radial-gradient(circle, oklch(0.52 0.09 192 / 0.08) 0.8px, transparent 0.8px);
+  background-size: 40px 40px, 20px 20px;
+  background-position: 0 0, 10px 10px;
+  mask-image:
+    radial-gradient(ellipse 75% 60% at 50% 50%, black 30%, transparent 80%);
+  -webkit-mask-image:
+    radial-gradient(ellipse 75% 60% at 50% 50%, black 30%, transparent 80%);
 }
-[data-theme="dark"] .topo-bg::before,
-.dark .topo-bg::before {
-  opacity: 0.18;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600'%3E%3Cdefs%3E%3Cstyle%3Epath%7Bfill:none;stroke:%233d9fa8;stroke-width:0.9;opacity:0.6%7D%3C/style%3E%3C/defs%3E%3Cpath d='M-100,300 C50,280 100,240 180,250 C230,257 260,310 320,295 C380,280 400,230 460,245 C520,260 540,315 600,300 C660,285 690,230 750,248 C810,266 840,310 900,295'/%3E%3Cpath d='M-100,330 C40,305 90,265 170,278 C230,288 265,340 330,322 C390,304 415,258 475,272 C535,286 555,338 618,325 C678,312 705,258 768,275 C828,292 855,335 920,322'/%3E%3Cpath d='M-100,360 C30,332 80,292 165,308 C228,320 270,370 338,350 C400,330 428,284 490,300 C550,316 572,362 636,348 C698,334 722,280 788,298 C848,316 872,358 940,344'/%3E%3Cpath d='M-100,390 C22,358 72,318 160,336 C226,350 275,402 346,380 C410,360 442,312 506,328 C568,344 590,390 654,376 C718,362 740,305 808,324 C870,342 895,384 960,368'/%3E%3Cpath d='M-100,270 C60,252 110,212 190,224 C245,232 275,288 338,270 C398,252 420,204 480,218 C540,232 560,286 622,272 C682,258 708,204 770,222 C830,240 858,282 918,268'/%3E%3Cpath d='M-100,240 C70,225 120,185 200,196 C258,204 285,260 348,243 C408,226 432,178 492,192 C552,206 570,260 634,246 C694,232 718,178 782,196 C842,214 868,254 930,240'/%3E%3Cpath d='M-100,420 C14,384 65,344 155,364 C224,380 278,432 352,410 C418,390 452,342 518,358 C580,374 604,418 670,404 C734,390 756,332 826,352 C888,396 932,440 1000,424'/%3E%3Cpath d='M-100,450 C6,412 58,370 148,392 C220,410 280,462 358,438 C426,418 462,368 530,386 C594,402 618,448 686,432 C750,416 774,358 844,378 C908,396 932,440 1000,424'/%3E%3C/svg%3E");
+
+[data-theme="dark"] .medfield-bg::before,
+.dark .medfield-bg::before {
+  background-image:
+    radial-gradient(circle, oklch(0.62 0.09 192 / 0.22) 1.2px, transparent 1.2px),
+    radial-gradient(circle, oklch(0.62 0.09 192 / 0.1) 0.8px, transparent 0.8px);
+  background-size: 40px 40px, 20px 20px;
+  background-position: 0 0, 10px 10px;
 }
 
 /* Glowing border on primary action areas */
