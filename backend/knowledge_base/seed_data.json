@@ -1,0 +1,262 @@
+[
+  {
+    "id": "kb_001",
+    "topic": "diabetes",
+    "title": "Type 2 Diabetes — Symptoms and Early Detection",
+    "content": "Type 2 diabetes develops when the body becomes resistant to insulin or cannot use it effectively, causing blood glucose to rise over time. Common symptoms include increased thirst, frequent urination, fatigue, blurred vision, slow wound healing, and unexplained weight changes. Some people have no symptoms early on, which is why screening matters. Risk factors include excess body weight, family history, sedentary habits, prior gestational diabetes, and high blood pressure. Early lifestyle changes such as improving diet, increasing activity, and weight management can delay or prevent progression. Diagnosis is based on blood tests such as fasting glucose, HbA1c, or an oral glucose tolerance test. People with symptoms, prediabetes, or major risk factors should discuss testing with a clinician.",
+    "source": "WHO Guidelines 2023",
+    "tags": [
+      "diabetes",
+      "blood sugar",
+      "insulin resistance",
+      "prediabetes"
+    ]
+  },
+  {
+    "id": "kb_002",
+    "topic": "hypertension",
+    "title": "Hypertension — Why Blood Pressure Matters",
+    "content": "Hypertension is persistent elevation of arterial blood pressure and often causes no symptoms until it is advanced or complications develop. Regular readings above the normal range increase the risk of stroke, heart attack, kidney disease, and vision loss. Lifestyle measures can lower blood pressure: reducing salt intake, staying active, managing stress, limiting alcohol, maintaining a healthy weight, and not smoking. Some patients need medication in addition to lifestyle changes. Blood pressure should be checked correctly, with an appropriately sized cuff and after a few minutes of rest. Very high readings with chest pain, shortness of breath, severe headache, weakness, or confusion need urgent medical assessment. Never adjust prescription medicines without medical advice.",
+    "source": "AHA/ACC Hypertension Guidance",
+    "tags": [
+      "hypertension",
+      "blood pressure",
+      "stroke",
+      "cardiovascular risk"
+    ]
+  },
+  {
+    "id": "kb_003",
+    "topic": "anemia",
+    "title": "Anemia — Common Symptoms and Evaluation",
+    "content": "Anemia means the blood carries less oxygen than normal, usually because hemoglobin or red blood cell levels are low. Symptoms often include tiredness, paleness, shortness of breath on exertion, dizziness, headaches, cold hands and feet, and reduced exercise tolerance. Iron deficiency is common, but anemia can also be caused by vitamin B12 or folate deficiency, chronic inflammation, kidney disease, blood loss, or inherited blood disorders. Workup usually includes a complete blood count, iron studies, and sometimes tests for B12, folate, kidney function, or bleeding. Treatment depends on the cause, so iron tablets should not be taken blindly for a long time without checking. Severe weakness, chest pain, fainting, or black stools warrant prompt medical attention.",
+    "source": "NICE / WHO Primary Care Summary",
+    "tags": [
+      "anemia",
+      "iron deficiency",
+      "fatigue",
+      "hemoglobin"
+    ]
+  },
+  {
+    "id": "kb_004",
+    "topic": "cardiac disease",
+    "title": "Cardiac Disease — Warning Signs and Risk Reduction",
+    "content": "Heart disease covers conditions that reduce blood flow, weaken the heart muscle, or disturb the heart rhythm. Warning signs may include chest pressure, shortness of breath, palpitations, swelling of the legs, reduced exercise tolerance, and fainting. Risk factors include high blood pressure, diabetes, smoking, high LDL cholesterol, obesity, family history, and lack of physical activity. A heart-healthy pattern emphasizes regular movement, adequate sleep, blood pressure control, and diets rich in vegetables, fruit, legumes, whole grains, fish, and unsalted nuts. Chest pain that spreads to the arm, jaw, or back; severe breathlessness; or collapse can be emergencies. Diagnosis and treatment depend on the exact condition, so persistent symptoms should be assessed by a clinician.",
+    "source": "AHA Patient Education Summary",
+    "tags": [
+      "heart disease",
+      "chest pain",
+      "palpitations",
+      "risk factors"
+    ]
+  },
+  {
+    "id": "kb_005",
+    "topic": "kidney disease",
+    "title": "Kidney Disease — Early Clues and Monitoring",
+    "content": "Kidney disease may develop silently and only show up on laboratory testing. Early clues can include swelling of the ankles, foamy urine, high blood pressure, fatigue, changes in urination, or nausea. Common causes include diabetes, hypertension, autoimmune disease, urinary obstruction, infections, and certain medications. Monitoring often includes serum creatinine, estimated glomerular filtration rate, urine albumin, and blood pressure. Protecting kidney health usually means managing diabetes and blood pressure, avoiding unnecessary NSAIDs, staying hydrated appropriately, and following medical advice on salt and protein intake. Sudden urine reduction, severe swelling, confusion, or very high potassium symptoms need urgent review. People with known kidney disease should keep scheduled follow-up and never start supplements or herbal products without checking for kidney safety.",
+    "source": "KDIGO / Kidney Foundation Overview",
+    "tags": [
+      "kidney disease",
+      "creatinine",
+      "proteinuria",
+      "blood pressure"
+    ]
+  },
+  {
+    "id": "kb_006",
+    "topic": "common skin conditions",
+    "title": "Common Skin Conditions — Rash, Eczema, and Acne Basics",
+    "content": "Many skin complaints are caused by irritation, allergy, dryness, infection, or inflammation rather than anything dangerous. Eczema usually causes dry, itchy, inflamed patches that flare with soaps, weather changes, or stress. Contact dermatitis appears after the skin touches an irritating substance or allergen. Acne is related to blocked pores, oil, bacteria, and hormones and often responds to gentle cleansing and non-comedogenic skin care. Fungal rashes can be ring-shaped and itchy, while bacterial infections may be warm, tender, and crusting. Most skin conditions improve with fragrance-free moisturizers, mild cleansers, and avoiding scratching. Sudden swelling of the face, widespread blistering, rapidly spreading redness, or rash with fever may need urgent care. Persistent or recurrent rashes deserve medical review.",
+    "source": "Dermatology Primary Care Guide",
+    "tags": [
+      "rash",
+      "eczema",
+      "acne",
+      "dermatitis"
+    ]
+  },
+  {
+    "id": "kb_007",
+    "topic": "cataract",
+    "title": "Cataract — Symptoms, Progression, and Treatment",
+    "content": "A cataract is a clouding of the lens inside the eye that usually develops gradually with age, though injury, diabetes, smoking, and steroid use can contribute. Typical symptoms include blurred or hazy vision, glare around lights, faded colors, difficulty reading, and trouble seeing at night. Cataracts are diagnosed during an eye examination with pupil dilation. Early on, stronger lighting or updated glasses may help, but surgery is the only definitive treatment when the cataract begins to limit daily life. Cataract surgery replaces the cloudy lens with an artificial one and is generally safe and effective. Sudden vision loss, eye pain, flashes, or a curtain over vision are not typical of cataract and should be evaluated urgently.",
+    "source": "AAO Patient Reference",
+    "tags": [
+      "cataract",
+      "vision",
+      "blurred vision",
+      "eye surgery"
+    ]
+  },
+  {
+    "id": "kb_008",
+    "topic": "eye health",
+    "title": "Eye Health — Red Flags and Routine Care",
+    "content": "Routine eye care helps detect problems before vision loss occurs. Warning signs that need assessment include sudden blurred vision, eye pain, redness with light sensitivity, flashes of light, new floaters, double vision, or a curtain-like shadow. People with diabetes, high blood pressure, autoimmune disease, or a strong family history of eye problems may need more regular exams. Protective habits include sunglasses with UV protection, breaks from close screen work, good contact lens hygiene, not smoking, and controlling blood sugar and blood pressure. Dry eyes are common and can improve with blinking breaks, humidity, and artificial tears if appropriate. Never ignore sudden changes in one eye, because stroke, retinal detachment, optic nerve problems, and infection can present quickly and need urgent treatment.",
+    "source": "National Eye Institute Overview",
+    "tags": [
+      "eye health",
+      "vision",
+      "floaters",
+      "retina"
+    ]
+  },
+  {
+    "id": "kb_009",
+    "topic": "common infections",
+    "title": "Common Infections — General Principles",
+    "content": "Common infections include viral colds, flu, throat infections, urinary infections, and some skin or stomach infections. Many mild viral illnesses improve with rest, fluids, and symptom relief, but bacterial infections may need targeted treatment after evaluation. Fever, cough, sore throat, burning urination, diarrhea, or skin redness can occur in both viral and bacterial illness, so the pattern and severity matter. Hand hygiene, staying home when sick, respiratory etiquette, food safety, and vaccination lower risk. Red flags include confusion, trouble breathing, severe dehydration, chest pain, stiff neck, rapidly worsening symptoms, or a rash with fever. Antibiotics do not help viral infections and should not be taken unless prescribed. If symptoms persist beyond a few days or are worsening, medical review is appropriate.",
+    "source": "CDC Patient Education",
+    "tags": [
+      "infection",
+      "fever",
+      "antibiotics",
+      "viral illness"
+    ]
+  },
+  {
+    "id": "kb_010",
+    "topic": "fever management",
+    "title": "Fever Management — What Helps and When to Worry",
+    "content": "Fever is a body temperature above the usual range and is often a sign that the immune system is responding to infection or inflammation. Mild fevers can be managed with rest, fluids, light clothing, and simple symptom tracking. The underlying cause matters more than the number alone, especially if the person is otherwise well. Warning signs include difficulty breathing, chest pain, confusion, severe dehydration, a stiff neck, persistent vomiting, seizures, or a rash that does not fade with pressure. Infants, older adults, pregnant people, and immunocompromised patients need a lower threshold for evaluation. Fever lasting several days, recurring fever, or fever with severe pain should be assessed. Do not combine medicines or exceed recommended doses without guidance from a pharmacist or clinician.",
+    "source": "NHS Fever Advice",
+    "tags": [
+      "fever",
+      "temperature",
+      "hydration",
+      "infection"
+    ]
+  },
+  {
+    "id": "kb_011",
+    "topic": "mental health basics",
+    "title": "Mental Health Basics — Stress, Anxiety, and Depression",
+    "content": "Mental health symptoms can affect sleep, appetite, concentration, motivation, and relationships. Stress is a normal response to pressure, while anxiety may cause excessive worry, restlessness, muscle tension, and a racing mind. Depression may involve low mood, loss of interest, fatigue, guilt, changes in sleep or appetite, and difficulty functioning. Self-help strategies include regular sleep, movement, social contact, limiting alcohol and drugs, and breaking problems into smaller steps. Persistent symptoms, panic attacks, self-harm thoughts, or inability to cope should prompt professional support. If someone has thoughts of suicide or harming others, urgent emergency help is needed immediately. Mental health concerns are real medical issues and deserve compassionate care, not blame. A clinician can screen for depression, anxiety, and related conditions and suggest therapy, medication, or both.",
+    "source": "WHO Mental Health Factsheet",
+    "tags": [
+      "mental health",
+      "anxiety",
+      "depression",
+      "stress"
+    ]
+  },
+  {
+    "id": "kb_012",
+    "topic": "pregnancy basics",
+    "title": "Pregnancy Basics — Common Symptoms and Safety",
+    "content": "Pregnancy symptoms can include missed periods, nausea, breast tenderness, fatigue, more frequent urination, and food aversions, but symptoms alone do not confirm pregnancy. A home pregnancy test is often used first, followed by clinical confirmation if needed. Prenatal care focuses on folic acid, balanced nutrition, vaccines when recommended, avoiding alcohol and smoking, and managing chronic conditions such as diabetes or hypertension. Concerning symptoms include vaginal bleeding, severe abdominal pain, one-sided pelvic pain, severe headache, vision changes, swelling of the face or hands, and reduced fetal movement later in pregnancy. These need prompt medical review. Medications, supplements, and herbal products should be checked for pregnancy safety. Every pregnancy is different, so personalized advice from an obstetric clinician is important.",
+    "source": "ACOG Patient Guidance",
+    "tags": [
+      "pregnancy",
+      "prenatal care",
+      "nausea",
+      "bleeding"
+    ]
+  },
+  {
+    "id": "kb_013",
+    "topic": "cancer warning signs",
+    "title": "Cancer Warning Signs — When to Get Checked",
+    "content": "Cancer warning signs are often non-specific and can overlap with many benign conditions, but persistent changes should be assessed. Examples include an unexplained lump, ongoing weight loss, blood in urine or stool, coughing up blood, a sore that does not heal, persistent hoarseness, unusual bleeding, persistent indigestion, new changes in a mole, or a cough lasting weeks without improvement. Not every warning sign means cancer, but timing and persistence matter. Age-appropriate screening for breast, cervical, colorectal, lung, and other cancers saves lives by finding disease earlier. Anyone with a strong family history, tobacco exposure, or genetic risk may need tailored screening. If symptoms are persistent, unexplained, or worsening, a clinician should examine the patient and consider tests rather than waiting indefinitely.",
+    "source": "Cancer Research UK / NCI Summary",
+    "tags": [
+      "cancer",
+      "warning signs",
+      "screening",
+      "lump"
+    ]
+  },
+  {
+    "id": "kb_014",
+    "topic": "medication interactions",
+    "title": "Medication Interactions — Safe Use Overview",
+    "content": "Medication interactions can happen when two drugs, supplements, foods, or alcohol change how a medicine works or increase side effects. Common problems include excessive sleepiness, bleeding risk, low blood pressure, heart rhythm changes, or reduced effectiveness of treatment. Important examples include combining multiple medicines that contain the same ingredient, mixing sedatives with alcohol, or taking certain antibiotics with interacting heart or cholesterol medicines. Over-the-counter medicines and herbal supplements also matter. Patients should keep an up-to-date medication list and show it to every clinician and pharmacist. Never start, stop, or change prescription doses without medical advice. If a new medicine causes rash, swelling, breathing difficulty, confusion, or severe dizziness, seek urgent help. Interaction checks are especially important for older adults and people with many chronic conditions.",
+    "source": "FDA Medication Safety Handbook",
+    "tags": [
+      "medications",
+      "interactions",
+      "side effects",
+      "pharmacology"
+    ]
+  },
+  {
+    "id": "kb_015",
+    "topic": "first aid basics",
+    "title": "First Aid Basics — Immediate Actions and Red Flags",
+    "content": "Basic first aid focuses on keeping the person safe, calling for help early, and avoiding harmful improvisation. For severe bleeding, apply direct pressure with a clean cloth and call emergency services. For chest pain, stroke symptoms, difficulty breathing, or collapse, treat the situation as an emergency immediately. For minor cuts, clean the wound, protect it, and watch for signs of infection. For burns, cool the area with running water and do not apply ice directly. For choking, use the appropriate age-specific rescue steps and call for help if the person cannot breathe or speak. Do not give food or drink to an unconscious person. If you are unsure what to do, contact emergency services or a trained medical professional rather than waiting. First aid is a bridge to professional care, not a substitute.",
+    "source": "Red Cross First Aid Manual",
+    "tags": [
+      "first aid",
+      "bleeding",
+      "burns",
+      "emergency"
+    ]
+  },
+  {
+    "id": "kb_016",
+    "topic": "nutrition fundamentals",
+    "title": "Nutrition Fundamentals — Balanced Eating for Health",
+    "content": "A balanced eating pattern usually emphasizes vegetables, fruits, whole grains, legumes, nuts, lean proteins, and healthy fats while limiting excess salt, added sugar, and ultra-processed foods. Hydration needs vary, but regular fluid intake matters, especially during illness, heat, or exercise. Protein supports muscle and healing, while fiber helps bowel regularity, cholesterol control, and blood sugar stability. Micronutrients such as iron, calcium, vitamin D, folate, and B12 are important, particularly in pregnancy, childhood, or restricted diets. Extreme fad diets can worsen nutrition and interact with medications. People with diabetes, kidney disease, heart disease, or pregnancy often need individualized diet guidance. Sudden weight loss, eating difficulty, swallowing problems, or vomiting that limits intake should be evaluated by a clinician or dietitian.",
+    "source": "Harvard Healthy Eating Plate",
+    "tags": [
+      "nutrition",
+      "diet",
+      "fiber",
+      "healthy eating"
+    ]
+  },
+  {
+    "id": "kb_017",
+    "topic": "pediatric health basics",
+    "title": "Pediatric Health Basics — Growth, Fever, and Warning Signs",
+    "content": "Children often show illness through behavior changes as much as through symptoms. Common concerns include fever, cough, vomiting, diarrhea, ear pain, rash, and poor appetite. Growth, sleep, hydration, and developmental milestones help assess overall health. Warning signs include difficulty breathing, dehydration, unusual sleepiness, seizure, stiff neck, persistent high fever, bluish lips, or a child who is hard to wake. Infants need urgent evaluation for fever depending on age and the overall picture. Vaccination, hand hygiene, safe sleep, nutrition, and poison prevention are major parts of child health. Over-the-counter medicines should be used only with age-appropriate guidance. If a child looks very unwell or caregivers are worried, prompt medical assessment is appropriate even if the problem seems minor at first.",
+    "source": "AAP HealthyChildren Overview",
+    "tags": [
+      "pediatrics",
+      "fever",
+      "growth",
+      "children"
+    ]
+  },
+  {
+    "id": "kb_018",
+    "topic": "respiratory conditions",
+    "title": "Respiratory Conditions — Cough, Asthma, and Breathing Trouble",
+    "content": "Respiratory symptoms include cough, wheeze, chest tightness, shortness of breath, mucus production, and noisy breathing. Viral colds, asthma, allergies, pneumonia, and chronic lung disease can all cause similar symptoms. A sudden inability to speak in full sentences, blue lips, severe chest pain, or rapidly worsening breathlessness is an emergency. Asthma often causes episodic wheeze and tightness that improve with prescribed reliever medicines, while infections may include fever and body aches. Smoking, pollution, poor indoor ventilation, and uncontrolled allergies can worsen symptoms. Persistent cough, blood-stained sputum, weight loss, or breathlessness on minimal exertion need medical review. People with known asthma or COPD should follow their action plan and keep rescue inhalers available. Avoid guessing the cause if symptoms are severe or changing quickly.",
+    "source": "Global Initiative for Asthma / Lung Health Summary",
+    "tags": [
+      "respiratory",
+      "cough",
+      "asthma",
+      "shortness of breath"
+    ]
+  },
+  {
+    "id": "kb_019",
+    "topic": "gastrointestinal issues",
+    "title": "Gastrointestinal Issues — Abdominal Pain, Diarrhea, and Reflux",
+    "content": "Digestive complaints may come from reflux, viral gastroenteritis, food intolerance, constipation, ulcers, gallbladder disease, or more serious problems. Heartburn usually feels like burning behind the breastbone and can worsen after meals or lying down. Diarrhea may be caused by infection, diet, or medication side effects, while constipation commonly leads to bloating and abdominal discomfort. Red flags include severe or localized abdominal pain, blood in stool, black stool, persistent vomiting, fever with rigidity, inability to keep fluids down, or jaundice. Hydration is important during vomiting or diarrhea, and bland foods may help short-term. Persistent abdominal pain, weight loss, swallowing difficulty, or symptoms that wake someone from sleep should be evaluated. Avoid assuming all stomach pain is \"just indigestion\" because surgical and infectious conditions can look similar early.",
+    "source": "NIDDK Digestive Health Guide",
+    "tags": [
+      "gastrointestinal",
+      "abdominal pain",
+      "diarrhea",
+      "reflux"
+    ]
+  },
+  {
+    "id": "kb_020",
+    "topic": "musculoskeletal pain",
+    "title": "Musculoskeletal Pain — Muscle, Joint, and Back Pain Basics",
+    "content": "Musculoskeletal pain is commonly due to strain, overuse, posture, inflammation, arthritis, or minor injury. Pain may feel dull, sharp, stiff, swollen, or worse with movement. Rest, gentle mobility, heat or cold, and gradual return to activity often help simple strain, but complete inactivity can prolong stiffness. Concerning signs include major swelling, deformity, inability to bear weight, weakness, numbness, fever with joint pain, or pain after a significant fall. Back pain with leg weakness, saddle numbness, or bladder or bowel changes needs urgent assessment. Long-lasting joint pain, morning stiffness, or repeated swelling may suggest inflammatory disease or arthritis and should be reviewed. Overuse injuries often improve when the load is reduced and technique or ergonomics are corrected, but persistent pain deserves evaluation rather than repeated self-treatment.",
+    "source": "Orthopedic Primary Care Summary",
+    "tags": [
+      "musculoskeletal",
+      "back pain",
+      "joint pain",
+      "strain"
+    ]
+  }
+]

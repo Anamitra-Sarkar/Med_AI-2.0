@@ -22,6 +22,8 @@ from pydantic import BaseModel, Field
 from pymongo import MongoClient, DESCENDING
 
 from models import MODEL_REGISTRY, predict
+from knowledge_base.retriever import retrieve
+from routes.knowledge import router as knowledge_router
 
 load_dotenv()
 
@@ -57,6 +59,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(knowledge_router)
 
 # ---------------------------------------------------------------------------
 # Clients
@@ -94,6 +98,24 @@ BASE_SYSTEM_PROMPT = (
     "You are Valeon, a helpful medical AI assistant. "
     "Provide accurate, empathetic, and evidence-based health information. "
     "Always remind users to consult a qualified healthcare professional for diagnosis and treatment."
+)
+
+SAFETY_RULES = (
+    "
+
+SAFETY RULES — ALWAYS FOLLOW:
+"
+    '1. Never make definitive medical diagnoses. Say "this could indicate..." not "you have..."
+'
+    "2. Always recommend consulting a qualified healthcare professional for symptoms.
+"
+    "3. For emergency symptoms (chest pain, difficulty breathing, stroke signs, severe bleeding),
+"
+    '   immediately say: "This sounds like a medical emergency. Call emergency services (112/911) now."
+'
+    "4. Never recommend specific prescription drug dosages.
+"
+    "5. When uncertain, say you're uncertain — do not hallucinate medical facts."
 )
 
 # ---------------------------------------------------------------------------
@@ -140,23 +162,57 @@ def _sanitize(text: str) -> str:
     cleaned = bleach.clean(text, tags=[], attributes={}, strip=True)
     return cleaned.strip()
 
-def _build_system_prompt(user_profile: dict | None) -> str:
-    if not user_profile:
-        return BASE_SYSTEM_PROMPT
-    parts = []
-    if user_profile.get("name"): parts.append(f"Patient name: {_sanitize(user_profile['name'])}")
-    if user_profile.get("email"): parts.append(f"Email: {_sanitize(user_profile['email'])}")
-    if user_profile.get("diseases"): parts.append(f"Known conditions: {_sanitize(user_profile['diseases'])}")
-    if user_profile.get("height"): parts.append(f"Height: {_sanitize(user_profile['height'])}")
-    if user_profile.get("weight"): parts.append(f"Weight: {_sanitize(user_profile['weight'])}")
-    if user_profile.get("left_eye_power"): parts.append(f"Left eye power: {_sanitize(user_profile['left_eye_power'])}")
-    if user_profile.get("right_eye_power"): parts.append(f"Right eye power: {_sanitize(user_profile['right_eye_power'])}")
-    if not parts:
-        return BASE_SYSTEM_PROMPT
-    profile_ctx = (
-        "\n\nPatient profile:\n" + "\n".join(f"  \u2022 {p}" for p in parts)
-    )
-    return BASE_SYSTEM_PROMPT + profile_ctx
+def _build_rag_context(entries: list[dict[str, Any]]) -> str:
+    if not entries:
+        return ""
+    blocks = ["MEDICAL KNOWLEDGE CONTEXT (use this to answer accurately):"]
+    for entry in entries:
+        blocks.extend([
+            "---",
+            f"[title]: {_sanitize(str(entry.get('title', '')))}",
+            _sanitize(str(entry.get('content', ''))),
+            f"Source: {_sanitize(str(entry.get('source', '')))}",
+        ])
+    blocks.extend([
+        "---",
+        "Based on the above context and your medical knowledge, answer the user's question accurately. Always recommend consulting a qualified doctor for diagnosis and treatment. Never make definitive diagnoses.",
+    ])
+    return "
+".join(blocks)
+
+
+def _build_system_prompt(user_profile: dict | None, rag_entries: list[dict[str, Any]] | None = None) -> str:
+    parts = [BASE_SYSTEM_PROMPT]
+    if user_profile:
+        profile_parts = []
+        if user_profile.get("name"):
+            profile_parts.append(f"Patient name: {_sanitize(user_profile['name'])}")
+        if user_profile.get("email"):
+            profile_parts.append(f"Email: {_sanitize(user_profile['email'])}")
+        if user_profile.get("diseases"):
+            profile_parts.append(f"Known conditions: {_sanitize(user_profile['diseases'])}")
+        if user_profile.get("height"):
+            profile_parts.append(f"Height: {_sanitize(user_profile['height'])}")
+        if user_profile.get("weight"):
+            profile_parts.append(f"Weight: {_sanitize(user_profile['weight'])}")
+        if user_profile.get("left_eye_power"):
+            profile_parts.append(f"Left eye power: {_sanitize(user_profile['left_eye_power'])}")
+        if user_profile.get("right_eye_power"):
+            profile_parts.append(f"Right eye power: {_sanitize(user_profile['right_eye_power'])}")
+        if profile_parts:
+            parts.append("
+
+Patient profile:
+" + "
+".join(f"  • {p}" for p in profile_parts))
+    rag_ctx = _build_rag_context(rag_entries or [])
+    if rag_ctx:
+        parts.append("
+
+" + rag_ctx)
+    parts.append(SAFETY_RULES)
+    return "".join(parts)
+
 
 def _get_db():
     if _db is None:
@@ -306,7 +362,8 @@ async def chat(req: ChatRequest):
     message = _sanitize(req.message)
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty after sanitisation")
-    system_content = _build_system_prompt(req.user_profile)
+    rag_entries = retrieve(message, top_k=3)
+    system_content = _build_system_prompt(req.user_profile, rag_entries)
     messages: list[dict[str, str]] = [{"role": "system", "content": system_content}]
     for entry in req.history[-20:]:
         role = entry.get("role", "user")
@@ -343,7 +400,7 @@ async def analyze_image(file: UploadFile = File(...), prompt: str = Form(default
     response = groq_client.chat.completions.create(
         model=CHAT_MODEL,
         messages=[
-            {"role": "system", "content": BASE_SYSTEM_PROMPT},
+            {"role": "system", "content": BASE_SYSTEM_PROMPT + SAFETY_RULES},
             {"role": "user", "content": [
                 {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
