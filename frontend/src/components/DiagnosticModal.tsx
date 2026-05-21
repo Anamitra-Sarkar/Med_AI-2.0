@@ -100,18 +100,18 @@ export default function DiagnosticModal({
       {isOpen && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[oklch(0.1_0_0_/_0.5)] backdrop-blur-[4px]"
           onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <motion.div
             initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-white/15 bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl"
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[16px] border border-border bg-surface-1 p-6 shadow-[var(--shadow-lg)]"
           >
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-white sm:text-xl">{title}</h2>
+            <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
+              <h2 className="text-lg font-semibold text-foreground sm:text-xl">{title}</h2>
               <motion.button onClick={handleClose} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                className="rounded-full p-2 text-white/50 transition-colors hover:bg-white/10 hover:text-white" aria-label="Close modal">
+                className="rounded-[var(--radius)] p-2 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground" aria-label="Close modal">
                 <FiX size={20} />
               </motion.button>
             </div>
@@ -125,8 +125,8 @@ export default function DiagnosticModal({
                   onClick={() => fileInputRef.current?.click()}
                   role="button" tabIndex={0}
                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
-                  className={`mb-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-all ${
-                    dragOver ? "border-teal-400 bg-teal-400/10" : "border-white/20 bg-white/5 hover:border-white/30 hover:bg-white/8"
+                  className={`mb-5 flex cursor-pointer flex-col items-center justify-center rounded-[16px] border border-dashed p-8 transition-all ${
+                    dragOver ? "border-primary bg-[color-mix(in_oklch,var(--primary)_10%,var(--surface-1))]" : "border-border bg-background hover:bg-surface-offset"
                   }`}
                 >
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleInputChange} className="hidden" />
@@ -134,18 +134,18 @@ export default function DiagnosticModal({
                     <img src={preview} alt="Preview" className="max-h-48 rounded-xl object-contain" />
                   ) : (
                     <>
-                      <FiUploadCloud size={40} className="mb-3 text-white/40" />
-                      <p className="text-sm text-white/60">Drag & drop an image or{" "}
-                        <span className="text-teal-400 font-medium">browse</span></p>
-                      <p className="mt-1 text-xs text-white/30">PNG, JPG up to 10 MB</p>
+                      <FiUploadCloud size={40} className="mb-3 text-primary" />
+                      <p className="text-sm text-foreground">Drag & drop an image or{" "}
+                        <span className="font-medium text-primary">browse</span></p>
+                      <p className="mt-1 text-xs text-muted-foreground">PNG, JPG up to 10 MB</p>
                     </>
                   )}
                 </div>
                 <motion.button onClick={handleAnalyze} disabled={!file || loading}
                   whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-500 to-blue-600 py-3 text-sm font-semibold text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-40">
+                  className="btn-primary flex w-full items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-40">
                   {loading ? (
-                    <><motion.div className="h-5 w-5 rounded-full border-2 border-white border-t-transparent"
+                    <><motion.div className="h-5 w-5 rounded-full border-2 border-current border-t-transparent"
                       animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
                       Analyzing…</>
                   ) : "Analyze Image"}
@@ -154,21 +154,21 @@ export default function DiagnosticModal({
             ) : (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
                 {preview && <img src={preview} alt="Analyzed" className="mx-auto max-h-40 rounded-xl object-contain" />}
-                <div className="rounded-2xl border border-teal-500/20 bg-teal-500/10 p-4">
+                <div className="rounded-[16px] border border-border bg-surface-2 p-4">
                   <div className="flex items-start gap-3">
-                    <FiCheckCircle className="mt-0.5 shrink-0 text-teal-400" size={20} />
+                    <FiCheckCircle className="mt-0.5 shrink-0 text-primary" size={20} />
                     <div>
-                      <h3 className="mb-1 font-semibold text-white">Analysis Summary</h3>
-                      <p className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap">{result.summary}</p>
+                      <h3 className="mb-1 font-semibold text-foreground">Analysis Summary</h3>
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">{result.summary}</p>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
-                  <FiAlertCircle className="mt-0.5 shrink-0 text-amber-400" size={20} />
-                  <p className="text-sm text-white/80">This is an AI-assisted analysis and should not replace professional medical advice. Please consult a healthcare provider for a definitive diagnosis.</p>
+                <div className="flex items-start gap-3 rounded-[16px] border border-border bg-background p-4">
+                  <FiAlertCircle className="mt-0.5 shrink-0 text-amber-500" size={20} />
+                  <p className="text-sm text-muted-foreground">This is an AI-assisted analysis and should not replace professional medical advice. Please consult a healthcare provider for a definitive diagnosis.</p>
                 </div>
                 <motion.button onClick={handleReset} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                  className="w-full rounded-xl border border-white/15 bg-white/5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10">
+                  className="w-full rounded-[var(--radius)] border border-border bg-background py-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-offset">
                   New Analysis
                 </motion.button>
               </motion.div>

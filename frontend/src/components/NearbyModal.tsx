@@ -135,7 +135,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[oklch(0.1_0_0_/_0.5)] backdrop-blur-[4px]"
           onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <motion.div
@@ -143,13 +143,13 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/15 bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl"
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[16px] border border-border bg-surface-1 p-6 shadow-[var(--shadow-lg)]"
           >
             {/* Header */}
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-5 flex items-center justify-between border-b border-border pb-4">
               <div className="flex items-center gap-2">
-                <FiMapPin className="text-teal-400" size={22} />
-                <h2 className="text-lg font-bold text-white sm:text-xl">
+                <FiMapPin className="text-primary" size={22} />
+                <h2 className="text-lg font-semibold text-foreground sm:text-xl">
                   Nearby Care Locator
                 </h2>
               </div>
@@ -157,7 +157,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                 onClick={handleClose}
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
-                className="rounded-full p-2 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+                className="rounded-[var(--radius)] p-2 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
                 aria-label="Close modal"
               >
                 <FiX size={20} />
@@ -166,38 +166,38 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
 
             {/* ── Permission request ── */}
             {step === "ask" && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="py-8 text-center"
-              >
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-teal-500/20">
-                  <FiNavigation size={28} className="text-teal-400" />
-                </div>
-                <h3 className="mb-2 text-lg font-semibold text-white">
-                  Location Access Required
-                </h3>
-                <p className="mx-auto mb-6 max-w-xs text-sm text-white/60">
-                  Valeon needs your location to show nearby doctors, hospitals,
-                  clinics, and pharmacies on an interactive map.
-                </p>
-                <div className="flex items-center justify-center gap-3">
-                  <motion.button
-                    onClick={() => setStep("denied")}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="rounded-xl border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-medium text-white/70 transition-colors hover:bg-white/10"
-                  >
-                    Deny
-                  </motion.button>
-                  <motion.button
-                    onClick={handleAllow}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className="rounded-xl bg-gradient-to-r from-teal-500 to-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg"
-                  >
-                    Allow
-                  </motion.button>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="py-8 text-center"
+                >
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--primary)_10%,var(--surface-1))]">
+                    <FiNavigation size={28} className="text-primary" />
+                  </div>
+                  <h3 className="mb-2 text-lg font-semibold text-foreground">
+                    Location Access Required
+                  </h3>
+                  <p className="mx-auto mb-6 max-w-xs text-sm text-muted-foreground">
+                    Valeon needs your location to show nearby doctors, hospitals,
+                    clinics, and pharmacies on an interactive map.
+                  </p>
+                  <div className="flex items-center justify-center gap-3">
+                    <motion.button
+                      onClick={() => setStep("denied")}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="rounded-[var(--radius)] border border-border bg-background px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-offset"
+                    >
+                      Deny
+                    </motion.button>
+                    <motion.button
+                      onClick={handleAllow}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="btn-primary px-6 py-2.5"
+                    >
+                      Allow
+                    </motion.button>
                 </div>
               </motion.div>
             )}
@@ -206,11 +206,11 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
             {step === "loading" && (
               <div className="flex flex-col items-center justify-center py-12">
                 <motion.div
-                  className="h-10 w-10 rounded-full border-4 border-teal-500 border-t-transparent"
+                  className="h-10 w-10 rounded-full border-4 border-primary border-t-transparent"
                   animate={{ rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                 />
-                <p className="mt-4 text-sm text-white/60">
+                <p className="mt-4 text-sm text-muted-foreground">
                   Finding nearby facilities…
                 </p>
                 {/* Loading skeleton */}
@@ -224,7 +224,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                         repeat: Infinity,
                         delay: i * 0.2,
                       }}
-                      className="h-14 rounded-xl bg-white/5"
+                      className="h-14 rounded-[var(--radius)] bg-surface-offset"
                     />
                   ))}
                 </div>
@@ -234,13 +234,13 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
             {/* ── Denied ── */}
             {step === "denied" && (
               <div className="py-8 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20">
-                  <FiAlertCircle size={24} className="text-red-400" />
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_oklch,#dc2626_10%,var(--surface-1))]">
+                  <FiAlertCircle size={24} className="text-red-600" />
                 </div>
-                <h3 className="mb-2 text-base font-semibold text-white">
+                <h3 className="mb-2 text-base font-semibold text-foreground">
                   Location Access Denied
                 </h3>
-                <p className="mx-auto mb-6 max-w-xs text-sm text-white/60">
+                <p className="mx-auto mb-6 max-w-xs text-sm text-muted-foreground">
                   Please enable location permissions in your browser settings to
                   use this feature.
                 </p>
@@ -248,7 +248,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                   onClick={() => setStep("ask")}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="rounded-xl border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                  className="rounded-[var(--radius)] border border-border bg-background px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-offset"
                 >
                   Try Again
                 </motion.button>
@@ -258,20 +258,20 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
             {/* ── Error ── */}
             {step === "error" && (
               <div className="py-8 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/20">
-                  <FiAlertCircle size={24} className="text-amber-400" />
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[color-mix(in_oklch,#d97706_10%,var(--surface-1))]">
+                  <FiAlertCircle size={24} className="text-amber-600" />
                 </div>
-                <h3 className="mb-2 text-base font-semibold text-white">
+                <h3 className="mb-2 text-base font-semibold text-foreground">
                   Something went wrong
                 </h3>
-                <p className="mx-auto mb-6 max-w-xs text-sm text-white/60">
+                <p className="mx-auto mb-6 max-w-xs text-sm text-muted-foreground">
                   {errorMsg || "An unexpected error occurred. Please try again."}
                 </p>
                 <motion.button
                   onClick={() => setStep("ask")}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="rounded-xl border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                  className="rounded-[var(--radius)] border border-border bg-background px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-offset"
                 >
                   Try Again
                 </motion.button>
@@ -282,10 +282,10 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
             {step === "results" && userCoords && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 {/* Leaflet Map */}
-                <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 shadow-lg">
+                <div className="mb-4 overflow-hidden rounded-[16px] border border-border shadow-[var(--shadow-sm)]">
                   <Suspense
                     fallback={
-                      <div className="h-[300px] w-full animate-pulse rounded-2xl bg-white/5" />
+                      <div className="h-[300px] w-full animate-pulse rounded-[16px] bg-surface-offset" />
                     }
                   >
                     <NearbyMap
@@ -298,15 +298,15 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                 </div>
 
                 {/* Tabs */}
-                <div className="mb-4 flex gap-1 rounded-xl bg-white/5 p-1">
+                <div className="mb-4 flex gap-1 rounded-[var(--radius)] bg-surface-offset p-1">
                   {tabs.map((tab) => (
                     <button
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
                       className={`flex-1 rounded-lg py-2 text-xs font-medium transition-all ${
                         activeTab === tab.key
-                          ? "bg-gradient-to-r from-teal-500 to-blue-600 text-white shadow"
-                          : "text-white/50 hover:text-white/70"
+                          ? "bg-primary text-primary-foreground shadow-[var(--shadow-sm)]"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
                       <span className="mr-1">{tab.emoji}</span>
@@ -325,46 +325,46 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                   {filteredPlaces.length > 0 ? (
                     filteredPlaces.map((place, i) => {
                       const osmLink = `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lon}#map=17/${place.lat}/${place.lon}`;
+                      const hoursText = place.opening_hours?.trim() || "";
+                      const lowerHours = hoursText.toLowerCase();
+                      const statusLabel = lowerHours.includes("closed")
+                        ? "Closed"
+                        : lowerHours.includes("open")
+                          ? "Open"
+                          : hoursText;
+                      const statusClass = lowerHours.includes("closed")
+                        ? "text-muted-foreground"
+                        : "text-primary";
                       return (
                         <motion.div
                           key={i}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: i * 0.04 }}
-                          className="group rounded-xl border border-white/10 bg-white/5 p-4 transition-colors hover:border-teal-500/30 hover:bg-white/8"
+                          className="group border-b border-border py-4 last:border-b-0"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
-                              <h4 className="truncate text-sm font-medium text-white">
+                              <h4 className="truncate text-sm font-medium text-foreground">
                                 {place.name}
                               </h4>
                               <span
-                                className="mt-0.5 inline-block rounded-full px-2 py-0.5 text-xs font-semibold capitalize"
+                                className="mt-1 inline-block rounded-[var(--radius)] px-2 py-0.5 text-xs font-medium capitalize"
                                 style={{
-                                  background:
-                                    place.type === "hospital"
-                                      ? "rgba(239,68,68,0.15)"
-                                      : place.type === "clinic"
-                                        ? "rgba(59,130,246,0.15)"
-                                        : "rgba(16,185,129,0.15)",
-                                  color:
-                                    place.type === "hospital"
-                                      ? "#f87171"
-                                      : place.type === "clinic"
-                                        ? "#60a5fa"
-                                        : "#34d399",
+                                  background: "color-mix(in oklch, var(--primary) 10%, var(--surface-1))",
+                                  color: "var(--primary)",
                                 }}
                               >
                                 {place.type}
                               </span>
                               {place.address && (
-                                <p className="mt-1 text-xs text-white/50">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                   {place.address}
                                 </p>
                               )}
-                              {place.opening_hours && (
-                                <p className="mt-1 text-xs text-white/40">
-                                  🕐 {place.opening_hours}
+                              {statusLabel && (
+                                <p className={`mt-1 text-xs ${statusClass}`}>
+                                  🕐 {statusLabel}
                                 </p>
                               )}
                             </div>
@@ -372,20 +372,20 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                               {place.phone && (
                                 <a
                                   href={`tel:${place.phone}`}
-                                  className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-teal-400"
+                                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
                                   aria-label="Call"
                                 >
                                   <FiPhone size={14} />
                                 </a>
                               )}
-                              <a
-                                href={osmLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="rounded-lg p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-teal-400"
-                                aria-label="Open in OpenStreetMap"
-                              >
-                                <FiExternalLink size={14} />
+                                <a
+                                  href={osmLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
+                                  aria-label="Open in OpenStreetMap"
+                                >
+                                  <FiExternalLink size={14} />
                               </a>
                             </div>
                           </div>
@@ -394,7 +394,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                     })
                   ) : (
                     <div className="py-10 text-center">
-                      <p className="text-sm text-white/40">
+                      <p className="text-sm text-muted-foreground">
                         No{" "}
                         {activeTab === "all"
                           ? "facilities"
@@ -403,7 +403,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                             : activeTab + "s"}{" "}
                         found within 3 km.
                       </p>
-                      <p className="mt-1 text-xs text-white/25">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Try expanding the search area or checking a different
                         category.
                       </p>
@@ -412,7 +412,7 @@ export default function NearbyModal({ isOpen, onClose }: NearbyModalProps) {
                 </div>
 
                 {/* Footer attribution */}
-                <p className="mt-3 text-center text-xs text-white/20">
+                <p className="mt-3 text-center text-xs text-muted-foreground">
                   Map data © OpenStreetMap contributors · Powered by Overpass
                   API
                 </p>

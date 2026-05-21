@@ -83,7 +83,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex h-[100dvh] overflow-hidden bg-background">
+    <div className="flex h-[100dvh] overflow-hidden bg-background text-foreground">
       <Sidebar
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen((p) => !p)}
@@ -96,16 +96,19 @@ export default function HomePage() {
 
       <div className="flex flex-1 flex-col min-w-0">
         {/* Top bar */}
-        <header className="flex shrink-0 items-center justify-between border-b border-border/50 px-4 py-2.5 glass-card">
+        <header className="flex shrink-0 items-center justify-between border-b border-border bg-surface-1 px-4 py-2.5 shadow-[var(--shadow-sm)]">
           <div className="flex items-center gap-3">
             <motion.button onClick={() => setSidebarOpen((p) => !p)}
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              className="rounded-lg p-2 text-foreground transition-colors hover:bg-primary/10"
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
               aria-label="Toggle sidebar">
               <FiMenu size={20} />
             </motion.button>
             <Logo size="sm" />
-            <h1 className="text-lg font-bold bg-gradient-to-r from-teal-400 to-blue-500 bg-clip-text text-transparent">
+            <h1
+              className="text-lg text-foreground"
+              style={{ fontFamily: "'Instrument Serif', serif" }}
+            >
               Valeon
             </h1>
           </div>
@@ -114,7 +117,7 @@ export default function HomePage() {
             <motion.button
               onClick={handleNewChat}
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              className="rounded-lg p-2 text-teal-400/70 transition-colors hover:bg-teal-500/10 hover:text-teal-400"
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
               aria-label="New chat" title="New Chat">
               <FiPlus size={20} />
             </motion.button>

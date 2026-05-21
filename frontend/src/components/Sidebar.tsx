@@ -151,17 +151,17 @@ export default function Sidebar({
   }: { label: string; icon: React.ElementType; open: boolean; onToggle: () => void; count?: number }) => (
     <button
       onClick={toggle}
-      className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left transition-colors hover:bg-white/5"
+      className="flex w-full items-center justify-between rounded-[var(--radius)] px-3 py-2 text-left transition-colors hover:bg-surface-offset"
     >
       <div className="flex items-center gap-2">
-        <Icon size={14} className="text-teal-400/70" />
-        <span className="text-xs font-semibold uppercase tracking-widest text-white/40">{label}</span>
+        <Icon size={14} className="text-primary" />
+        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</span>
         {count !== undefined && count > 0 && (
-          <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50">{count}</span>
+          <span className="rounded-full bg-surface-offset px-1.5 py-0.5 text-[10px] text-muted-foreground">{count}</span>
         )}
       </div>
       <motion.div animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.2 }}>
-        <FiChevronDown size={12} className="text-white/30" />
+        <FiChevronDown size={12} className="text-muted-foreground" />
       </motion.div>
     </button>
   );
@@ -173,7 +173,7 @@ export default function Sidebar({
         {isOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
             onClick={onToggle} />
         )}
       </AnimatePresence>
@@ -185,20 +185,19 @@ export default function Sidebar({
             ref={sidebarRef}
             initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed left-0 top-0 z-50 flex h-full w-[280px] flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-xl lg:relative lg:z-auto"
+            className="fixed left-0 top-0 z-50 flex h-full w-[280px] flex-col border-r border-border bg-background lg:relative lg:z-auto"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-white/50">Valeon</h2>
+            <div className="flex items-center justify-between border-b border-border bg-surface-1 px-4 py-3">
+              <h2
+                className="text-sm tracking-tight text-foreground"
+                style={{ fontFamily: "'Instrument Serif', serif" }}
+              >
+                Valeon
+              </h2>
               <div className="flex items-center gap-1">
-                <motion.button
-                  onClick={onNewChat} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                  className="rounded-lg p-1.5 text-teal-400/70 transition-colors hover:bg-teal-500/10 hover:text-teal-400"
-                  aria-label="New chat" title="New Chat">
-                  <FiPlus size={16} />
-                </motion.button>
                 <motion.button onClick={onToggle} whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                  className="rounded-lg p-1.5 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
                   aria-label="Close sidebar">
                   <FiX size={18} />
                 </motion.button>
@@ -206,7 +205,16 @@ export default function Sidebar({
             </div>
 
             {/* Scrollable content */}
-            <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+            <nav className="flex-1 overflow-y-auto p-3 space-y-3">
+              <motion.button
+                onClick={onNewChat}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                className="btn-primary flex w-full items-center justify-center gap-2"
+              >
+                <FiPlus size={16} />
+                New Chat
+              </motion.button>
 
               {/* ── Past Chats ── */}
               <SectionHeader label="Past Chats" icon={FiMessageSquare} open={chatsOpen}
@@ -219,26 +227,26 @@ export default function Sidebar({
                     <div className="pb-2 space-y-0.5">
                       {chatsLoading ? (
                         [1, 2, 3].map((i) => (
-                          <div key={i} className="mx-2 h-9 animate-pulse rounded-lg bg-white/5" />
+                          <div key={i} className="mx-2 h-9 animate-pulse rounded-lg bg-surface-offset" />
                         ))
                       ) : sessions.length === 0 ? (
-                        <p className="px-4 py-2 text-xs text-white/25">No past chats yet.</p>
+                        <p className="px-4 py-2 text-xs text-muted-foreground">No past chats yet.</p>
                       ) : (
                         sessions.map((s) => (
                           <motion.div key={s.id}
                             initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                            className="group flex items-center gap-2 rounded-xl px-3 py-2.5 hover:bg-white/8 cursor-pointer"
+                            className="group flex cursor-pointer items-center gap-2 rounded-[var(--radius)] px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
                             onClick={() => { onRestoreChat(s.id); onToggle(); }}
                           >
-                            <FiMessageSquare size={13} className="shrink-0 text-teal-400/50" />
+                            <FiMessageSquare size={13} className="shrink-0 text-primary" />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium text-white/70">{s.title}</p>
-                              <p className="text-[10px] text-white/30">{formatDate(s.updated_at)}</p>
+                              <p className="truncate text-xs font-medium">{s.title}</p>
+                              <p className="text-[10px] text-muted-foreground">{formatDate(s.updated_at)}</p>
                             </div>
                             <motion.button
                               onClick={(e) => handleDeleteSession(e, s.id)}
                               whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                              className="hidden shrink-0 rounded p-1 text-white/20 transition-colors hover:text-red-400 group-hover:flex"
+                              className="hidden shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground group-hover:flex"
                               aria-label="Delete chat">
                               <FiTrash2 size={12} />
                             </motion.button>
@@ -261,43 +269,43 @@ export default function Sidebar({
                     <div className="pb-2 space-y-0.5">
                       {uploadsLoading ? (
                         [1, 2].map((i) => (
-                          <div key={i} className="mx-2 h-9 animate-pulse rounded-lg bg-white/5" />
+                          <div key={i} className="mx-2 h-9 animate-pulse rounded-lg bg-surface-offset" />
                         ))
                       ) : uploads.length === 0 ? (
-                        <p className="px-4 py-2 text-xs text-white/25">No scans or uploads yet.</p>
+                        <p className="px-4 py-2 text-xs text-muted-foreground">No scans or uploads yet.</p>
                       ) : (
                         uploads.map((u) => {
                           const Icon = MODEL_ICON[u.model_type] || FiFolder;
                           return (
                             <motion.div key={u.id}
                               initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
-                              className="group flex items-center gap-2 rounded-xl px-3 py-2.5 hover:bg-white/8"
+                              className="group flex items-center gap-2 rounded-[var(--radius)] px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-surface-offset hover:text-foreground"
                             >
-                              <Icon size={13} className="shrink-0 text-teal-400/50" />
+                              <Icon size={13} className="shrink-0 text-primary" />
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-xs font-medium text-white/70">{u.filename}</p>
-                                <p className="text-[10px] text-white/30">{u.model_label} · {formatDate(u.uploaded_at)}</p>
+                                <p className="truncate text-xs font-medium">{u.filename}</p>
+                                <p className="text-[10px] text-muted-foreground">{u.model_label} · {formatDate(u.uploaded_at)}</p>
                               </div>
                               {/* Action buttons — visible on hover */}
                               <div className="hidden shrink-0 items-center gap-0.5 group-hover:flex">
                                 <motion.button
                                   onClick={(e) => { e.stopPropagation(); viewUpload(u); }}
                                   whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                                  className="rounded p-1 text-white/20 transition-colors hover:text-teal-400"
+                                  className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
                                   aria-label="View image" title="View">
                                   <FiExternalLink size={12} />
                                 </motion.button>
                                 <motion.button
                                   onClick={(e) => { e.stopPropagation(); downloadUpload(u); }}
                                   whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                                  className="rounded p-1 text-white/20 transition-colors hover:text-blue-400"
+                                  className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
                                   aria-label="Download image" title="Download">
                                   <FiDownload size={12} />
                                 </motion.button>
                                 <motion.button
                                   onClick={(e) => handleDeleteUpload(e, u.id)}
                                   whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
-                                  className="rounded p-1 text-white/20 transition-colors hover:text-red-400"
+                                  className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
                                   aria-label="Delete upload record">
                                   <FiTrash2 size={12} />
                                 </motion.button>
@@ -325,10 +333,10 @@ export default function Sidebar({
                           initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: i * 0.04, duration: 0.3 }}
                           onClick={() => onMenuSelect(item.key)}
-                          className="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-white/70 transition-all hover:bg-white/8 hover:text-white"
+                          className="group flex w-full items-center gap-3 rounded-[var(--radius)] px-3 py-2.5 text-left text-sm text-muted-foreground transition-all hover:bg-surface-offset hover:text-foreground"
                         >
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/5 transition-colors group-hover:bg-teal-500/20">
-                            <item.icon size={14} className="text-teal-400/70 transition-colors group-hover:text-teal-400" />
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-offset transition-colors group-hover:bg-surface-2">
+                            <item.icon size={14} className="text-primary transition-colors" />
                           </div>
                           <span className="text-xs leading-tight">{item.label}</span>
                         </motion.button>
@@ -341,8 +349,8 @@ export default function Sidebar({
             </nav>
 
             {/* Footer */}
-            <div className="border-t border-white/10 px-5 py-3">
-              <p className="text-[10px] text-white/30 text-center">
+            <div className="border-t border-border px-5 py-3">
+              <p className="text-center text-[10px] text-muted-foreground">
                 AI-powered diagnostics — not a substitute for professional medical advice
               </p>
             </div>
