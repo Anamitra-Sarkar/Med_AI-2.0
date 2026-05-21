@@ -32,6 +32,7 @@ export default function ChatInterface({
   onSessionCreated,
 }: ChatInterfaceProps) {
   const { user, userProfile } = useAuth();
+  const canPersist = Boolean(user && !user.isGuest);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -58,21 +59,17 @@ export default function ChatInterface({
 
   // Build the welcome message string
   const buildWelcome = useCallback((): Message => {
-    const displayName = userProfile?.name || user?.displayName || null;
+    const displayName = userProfile?.name || user?.displayName || "Guest";
     return {
       role: "assistant",
-      content: `Hello${
-        displayName ? `, ${displayName}` : ""
-      }! I'm Valeon, your AI health companion. I can help you with health questions, analyze medical images, and more. How can I assist you today?`,
+      content: `Hello, ${displayName}! I'm Valeon, your AI health companion. I can help you with health questions, analyze medical images, and more. How can I assist you today?`,
     };
   }, [user, userProfile]);
 
   // Single authoritative effect: handles both fresh start and session restore.
   // Runs when activeSessionId changes OR when the user object becomes available.
   useEffect(() => {
-    if (!user) return;
-
-    if (activeSessionId) {
+    if (activeSessionId && canPersist && user) {
       // --- Restore an existing session from MongoDB ---
       welcomeShownRef.current = false; // reset so next fresh chat shows welcome
       (async () => {
@@ -90,16 +87,17 @@ export default function ChatInterface({
           setMessages([buildWelcome()]);
         }
       })();
-    } else {
-      // --- Fresh chat: show welcome once, never again until a new fresh start ---
-      if (!welcomeShownRef.current) {
-        welcomeShownRef.current = true;
-        setSessionId(null);
-        setMessages([buildWelcome()]);
-      }
+      return;
+    }
+
+    // --- Fresh chat: show welcome once, never again until a new fresh start ---
+    if (!welcomeShownRef.current) {
+      welcomeShownRef.current = true;
+      setSessionId(null);
+      setMessages([buildWelcome()]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSessionId, user]);
+  }, [activeSessionId, canPersist, user]);
   // NOTE: buildWelcome intentionally omitted from deps — it changes when
   // userProfile loads, but we do NOT want to re-run this effect (and wipe
   // an in-progress conversation) just because the profile resolved.
@@ -138,7 +136,7 @@ export default function ChatInterface({
 
     // Ensure we have a session in MongoDB
     let currentSessionId = sessionId;
-    if (!currentSessionId && user) {
+    if (!currentSessionId && canPersist && user) {
       try {
         const session = await createChatSession(user.uid);
         currentSessionId = session.id;
@@ -157,7 +155,7 @@ export default function ChatInterface({
     }
 
     // Persist user message
-    if (currentSessionId && user) {
+    if (currentSessionId && canPersist && user) {
       appendChatMessage(user.uid, currentSessionId, { role: "user", content: userMsg.content }).catch(() => {});
     }
 
@@ -202,7 +200,7 @@ export default function ChatInterface({
       setStreaming(false);
       abortRef.current = null;
       // Persist assistant reply
-      if (currentSessionId && user && assistantContent) {
+      if (currentSessionId && canPersist && user && assistantContent) {
         appendChatMessage(user.uid, currentSessionId, { role: "assistant", content: assistantContent }).catch(() => {});
       }
     }

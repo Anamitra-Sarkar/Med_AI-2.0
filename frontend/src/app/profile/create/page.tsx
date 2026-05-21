@@ -38,12 +38,12 @@ export default function ProfileCreatePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && (!user || user.isGuest)) router.replace("/home");
   }, [authLoading, user, router]);
 
   // Pre-fill name/email from Firebase as soon as user is available
   useEffect(() => {
-    if (user) {
+    if (user && !user.isGuest) {
       setName(user.displayName || "");
       setEmail(user.email || "");
     }
@@ -52,8 +52,8 @@ export default function ProfileCreatePage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
 
-    if (!user) {
-      toast.error("You must be signed in");
+    if (!user || user.isGuest) {
+      toast.error("Profile setup is unavailable in guest mode");
       return;
     }
 
@@ -88,7 +88,7 @@ export default function ProfileCreatePage() {
     }
   }
 
-  if (authLoading || (!authLoading && !user)) {
+  if (authLoading || (!authLoading && (!user || user.isGuest))) {
     return <AppLoadingScreen message="Loading your profile…" />;
   }
 

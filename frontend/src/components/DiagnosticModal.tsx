@@ -73,7 +73,7 @@ export default function DiagnosticModal({
       setResult(res);
       // Record upload to MongoDB — include the base64 data_url so it can be
       // viewed and downloaded later from the sidebar File Uploads section.
-      if (user) {
+      if (user && !user.isGuest) {
         recordUpload({
           firebase_uid: user.uid,
           filename: file.name,

@@ -12,6 +12,7 @@ import Sidebar from "@/components/Sidebar";
 import ChatInterface from "@/components/ChatInterface";
 import DiagnosticModal from "@/components/DiagnosticModal";
 import NearbyModal from "@/components/NearbyModal";
+import { isFirebaseConfigured } from "@/lib/firebase";
 
 const diagnosticTitles: Record<string, string> = {
   cataract: "ClearView Cataract Screening",
@@ -37,7 +38,11 @@ export default function HomePage() {
 
   useEffect(() => {
     if (loading) return;
-    if (!user) { router.replace("/login"); return; }
+    if (!user) {
+      if (isFirebaseConfigured()) router.replace("/login");
+      return;
+    }
+    if (user.isGuest) return;
     if (hasProfile === null) return;
     if (hasProfile === false) router.replace("/profile/create");
   }, [loading, user, hasProfile, router]);
@@ -69,7 +74,11 @@ export default function HomePage() {
     setUploadRefreshTick((t) => t + 1);
   }, []);
 
-  if (loading || !user || hasProfile === null || hasProfile === false) {
+  if (
+    loading ||
+    (!user && isFirebaseConfigured()) ||
+    (user && !user.isGuest && (hasProfile === null || hasProfile === false))
+  ) {
     return <AppLoadingScreen message="Preparing your workspace…" />;
   }
 
@@ -109,11 +118,13 @@ export default function HomePage() {
               aria-label="New chat" title="New Chat">
               <FiPlus size={20} />
             </motion.button>
-            <Link href="/settings"
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
-              aria-label="Settings">
-              <FiSettings size={20} />
-            </Link>
+            {user && !user.isGuest && (
+              <Link href="/settings"
+                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground"
+                aria-label="Settings">
+                <FiSettings size={20} />
+              </Link>
+            )}
           </div>
         </header>
 

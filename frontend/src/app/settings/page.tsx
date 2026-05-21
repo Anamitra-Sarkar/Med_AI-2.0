@@ -59,7 +59,7 @@ export default function SettingsPage() {
   }, [authLoading, user, router]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.isGuest) return;
     getProfile(user.uid)
       .then((p) => {
         setName(p.name || "");
@@ -74,7 +74,10 @@ export default function SettingsPage() {
   }, [user]);
 
   async function handleSaveProfile() {
-    if (!user) return;
+    if (!user || user.isGuest) {
+      toast.error("Profile editing is unavailable in guest mode");
+      return;
+    }
     setSaving(true);
     try {
       await updateProfile(user.uid, {
@@ -98,6 +101,10 @@ export default function SettingsPage() {
   }
 
   async function handleLogout() {
+    if (user?.isGuest) {
+      router.replace("/");
+      return;
+    }
     try {
       await signOut();
       toast.success("Signed out");

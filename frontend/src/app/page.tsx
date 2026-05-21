@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion, useInView, type MotionProps } from "framer-motion";
 import {
   FiMessageCircle,
@@ -15,6 +16,7 @@ import {
   FiUser,
 } from "react-icons/fi";
 import Logo from "@/components/Logo";
+import { isFirebaseConfigured } from "@/lib/firebase";
 
 /* ─── animation helpers ─── */
 const fadeUp = {
@@ -232,6 +234,12 @@ const ECG_LINES = [
 
 /* ═══════════════════════ PAGE ═══════════════════════ */
 export default function Home() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isFirebaseConfigured()) router.replace("/home");
+  }, [router]);
+
   return (
     <div className="overflow-x-hidden">
 

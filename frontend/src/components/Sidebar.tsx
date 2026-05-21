@@ -81,6 +81,7 @@ export default function Sidebar({
   chatRefreshTick = 0, uploadRefreshTick = 0,
 }: SidebarProps) {
   const { user } = useAuth();
+  const canPersist = Boolean(user && !user.isGuest);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   const [chatsOpen, setChatsOpen] = useState(true);
@@ -103,7 +104,7 @@ export default function Sidebar({
   }, [isOpen, onToggle]);
 
   const fetchChats = useCallback(async () => {
-    if (!user) return;
+    if (!canPersist || !user) return;
     setChatsLoading(true);
     try {
       const data = await listChatSessions(user.uid);
@@ -111,10 +112,10 @@ export default function Sidebar({
     } catch { /* silently ignore */ } finally {
       setChatsLoading(false);
     }
-  }, [user]);
+  }, [canPersist, user]);
 
   const fetchUploads = useCallback(async () => {
-    if (!user) return;
+    if (!canPersist || !user) return;
     setUploadsLoading(true);
     try {
       const data = await listUploadRecords(user.uid);
@@ -122,14 +123,14 @@ export default function Sidebar({
     } catch { /* silently ignore */ } finally {
       setUploadsLoading(false);
     }
-  }, [user]);
+  }, [canPersist, user]);
 
   useEffect(() => { fetchChats(); }, [fetchChats, chatRefreshTick]);
   useEffect(() => { fetchUploads(); }, [fetchUploads, uploadRefreshTick]);
 
   async function handleDeleteSession(e: React.MouseEvent, sessionId: string) {
     e.stopPropagation();
-    if (!user) return;
+    if (!canPersist || !user) return;
     try {
       await deleteChatSession(user.uid, sessionId);
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
@@ -138,7 +139,7 @@ export default function Sidebar({
 
   async function handleDeleteUpload(e: React.MouseEvent, uploadId: string) {
     e.stopPropagation();
-    if (!user) return;
+    if (!canPersist || !user) return;
     try {
       await deleteUploadRecord(user.uid, uploadId);
       setUploads((prev) => prev.filter((u) => u.id !== uploadId));

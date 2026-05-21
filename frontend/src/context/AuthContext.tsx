@@ -16,7 +16,7 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut as firebaseSignOut,
-  type User,
+  type User as FirebaseUser,
 } from "firebase/auth";
 import {
   getFirebaseAuth,
@@ -27,20 +27,45 @@ import {
 import { getProfile, type UserProfile } from "@/lib/api";
 import { useTheme } from "@/context/ThemeContext";
 
+export interface AuthUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  isGuest?: boolean;
+}
+
 interface AuthContextValue {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
   /** null = still checking, true = profile exists, false = no profile yet */
   hasProfile: boolean | null;
   userProfile: UserProfile | null;
   refreshProfile: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<User>;
-  signUp: (email: string, password: string) => Promise<User>;
-  signInWithGoogle: () => Promise<User | null>;
+  signIn: (email: string, password: string) => Promise<AuthUser>;
+  signUp: (email: string, password: string) => Promise<AuthUser>;
+  signInWithGoogle: () => Promise<AuthUser | null>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+const GUEST_USER: AuthUser = {
+  uid: "guest",
+  email: null,
+  displayName: "Guest",
+  photoURL: null,
+  isGuest: true,
+};
+
+function normalizeUser(user: FirebaseUser): AuthUser {
+  return {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName,
+    photoURL: user.photoURL,
+  };
+}
 
 function shouldUseGoogleRedirectFlow(): boolean {
   if (typeof window === "undefined") return false;
@@ -58,11 +83,19 @@ function shouldUseGoogleRedirectFlow(): boolean {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(isFirebaseConfigured());
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const { initTheme, resetTheme } = useTheme();
+
+  const enterGuestMode = useCallback(() => {
+    setUser(GUEST_USER);
+    setHasProfile(true);
+    setUserProfile(null);
+    initTheme(GUEST_USER.uid, undefined);
+    setLoading(false);
+  }, [initTheme]);
 
   const checkProfile = useCallback(async (uid: string) => {
     try {
@@ -81,14 +114,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [initTheme]);
 
   const refreshProfile = useCallback(async () => {
-    const auth = getFirebaseAuth();
-    const currentUser = auth?.currentUser;
-    if (currentUser) await checkProfile(currentUser.uid);
-  }, [checkProfile]);
+    if (!user || user.isGuest) return;
+    await checkProfile(user.uid);
+  }, [checkProfile, user]);
 
   useEffect(() => {
     const auth = getFirebaseAuth();
-    if (!auth) return;
+    if (!auth) {
+      enterGuestMode();
+      return;
+    }
 
     // Process any pending redirect result from signInWithRedirect.
     // On mobile devices, Google sign-in uses the redirect flow, and getRedirectResult
@@ -116,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
+      setUser(firebaseUser ? normalizeUser(firebaseUser) : null);
       if (firebaseUser) {
         await checkProfile(firebaseUser.uid);
       } else {
@@ -128,27 +163,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
     return unsubscribe;
-  }, [checkProfile, resetTheme]);
+  }, [checkProfile, enterGuestMode, resetTheme]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth();
-    if (!auth) throw new Error("Firebase is not configured.");
+    if (!auth) return GUEST_USER;
     await ensureFirebaseAuthPersistence(auth);
     const credential = await signInWithEmailAndPassword(auth, email, password);
-    return credential.user;
+    return normalizeUser(credential.user);
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     const auth = getFirebaseAuth();
-    if (!auth) throw new Error("Firebase is not configured.");
+    if (!auth) return GUEST_USER;
     await ensureFirebaseAuthPersistence(auth);
     const credential = await createUserWithEmailAndPassword(auth, email, password);
-    return credential.user;
+    return normalizeUser(credential.user);
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
     const auth = getFirebaseAuth();
-    if (!auth) throw new Error("Firebase is not configured.");
+    if (!auth) return GUEST_USER;
     await ensureFirebaseAuthPersistence(auth);
 
     if (shouldUseGoogleRedirectFlow()) {
@@ -158,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const credential = await signInWithPopup(auth, getGoogleProvider());
-      return credential.user;
+      return normalizeUser(credential.user);
     } catch (error: unknown) {
       const code =
         typeof error === "object" && error && "code" in error ? String(error.code) : "";
